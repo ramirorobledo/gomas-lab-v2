@@ -1,0 +1,8 @@
+POST http://localhost:3000/api/pageindex/search
+Content-Type: application/json
+
+{
+  "tree_serialized": "{\"root\":{\"id\":\"root\",\"title\":\"Document\",\"level\":0,\"content\":\"\",\"children\":[{\"id\":\"section-0\",\"title\":\"Artículo 1\",\"level\":1,\"content\":\"Texto del artículo\",\"children\":[]}],\"metadata\":{\"type\":\"title\"}},\"metadata\":{\"total_sections\":1,\"total_paragraphs\":0,\"depth\":1}}",
+  "query": "Artículo",
+  "max_results": 5
+}

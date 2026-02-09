@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processWithGemini } from "@/lib/gemini";
 import { validateAndCleanMarkdown, generateForensicCertificate } from "@/lib/validation";
+import { buildPageIndexTree } from "@/lib/pageindex";
 
 export async function POST(request: NextRequest) {
     try {
@@ -59,11 +60,23 @@ export async function POST(request: NextRequest) {
         // 7. Generar certificado forense
         const certificado = generateForensicCertificate(validation, vlmProvider);
 
-        // 8. Estimar costo
-        // Costo base: $0.075 por imagen (Gemini 2.0 Flash)
+        // 8. Construir PageIndex Tree (con error handling)
+        let pageindexTree = null;
+        try {
+            pageindexTree = buildPageIndexTree(validation.cleaned_markdown, {
+                expediente: validation.legal_elements.expediente,
+                juzgado: validation.legal_elements.juzgado,
+            });
+            console.log("✓ PageIndex tree built successfully");
+        } catch (treeError) {
+            console.error("✗ Error building PageIndex tree:", treeError);
+            // Continúa sin tree (no es crítico)
+        }
+
+        // 9. Estimar costo
         const cost = vlmProvider === "gemini" ? 0.075 : 0.30;
 
-        // 9. Retornar respuesta
+        // 10. Retornar respuesta completa
         return NextResponse.json(
             {
                 success: true,
@@ -74,6 +87,8 @@ export async function POST(request: NextRequest) {
                 },
                 anomalies: validation.anomalies,
                 validation_status: validation.validation_status,
+                pageindex_tree: pageindexTree,
+                pageindex_metadata: pageindexTree?.metadata || null,
                 cost: cost,
                 file_info: {
                     name: file.name,
