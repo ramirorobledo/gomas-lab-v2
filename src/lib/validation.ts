@@ -12,10 +12,17 @@ interface ValidationResult {
         action_taken?: string;
     }>;
     cleaned_markdown: string;
+    structure_preserved: boolean;
+    legal_elements: {
+        expediente?: string;
+        juzgado?: string;
+        articulos?: number;
+        tablas?: number;
+    };
 }
 
 /**
- * Genera hash SHA256 de un buffer
+ * Genera hash SHA256
  */
 export function generateHash(data: Buffer | string): string {
     return crypto
@@ -25,7 +32,124 @@ export function generateHash(data: Buffer | string): string {
 }
 
 /**
- * Valida y limpia Markdown jurídico
+ * Extrae elementos legales del Markdown
+ */
+function extractLegalElements(markdown: string) {
+    const legalElements = {
+        expediente: undefined as string | undefined,
+        juzgado: undefined as string | undefined,
+        articulos: 0,
+        tablas: 0,
+    };
+
+    // Buscar expediente (formatos: 2024-12345, SLP-2024-001, etc)
+    const expedienteMatch = markdown.match(/(?:Expediente|Exp\.?|No\.)?\s*([A-Z]{0,3}-?\d{4}-?\d+)/i);
+    if (expedienteMatch) {
+        legalElements.expediente = expedienteMatch[1];
+    }
+
+    // Buscar juzgado (Penal, Civil, Administrativo, etc)
+    const juzgadoMatch = markdown.match(/(?:Juzgado|Tribunal)\s+(?:de\s+)?([A-Za-z\s]+?)(?:\s+(?:del|de|en)\s+|$)/i);
+    if (juzgadoMatch) {
+        legalElements.juzgado = juzgadoMatch[1].trim();
+    }
+
+    // Contar artículos (Art. 123, Artículo 45, etc)
+    const articuloMatches = markdown.match(/(?:Art\.?|Artículo)\s+\d+/gi);
+    legalElements.articulos = articuloMatches?.length || 0;
+
+    // Contar tablas
+    const tableMatches = markdown.match(/\|[\s\S]*?\|/g);
+    legalElements.tablas = tableMatches?.length || 0;
+
+    return legalElements;
+}
+
+/**
+ * Limpia tablas mal formateadas
+ */
+function cleanMalformedTables(markdown: string): { cleaned: string; issues: number } {
+    let cleaned = markdown;
+    let issuesFound = 0;
+
+    // Buscar líneas que parecen tablas pero están rotas
+    const lines = cleaned.split("\n");
+    const cleanedLines = lines.map((line) => {
+        // Si tiene pipes pero no es una tabla válida (menos de 3 células)
+        if (line.includes("|") && !line.match(/\|\s*[-:\s|]+\s*\|/)) {
+            const cells = line.split("|").filter((c) => c.trim());
+            if (cells.length < 3) {
+                // Convertir a párrafo normal
+                issuesFound++;
+                return cells.map((c) => c.trim()).join(" - ");
+            }
+        }
+        return line;
+    });
+
+    cleaned = cleanedLines.join("\n");
+
+    return { cleaned, issues: issuesFound };
+}
+
+/**
+ * Elimina encabezados y números de página repetitivos
+ */
+function removePageHeaders(markdown: string): { cleaned: string; removed: number } {
+    let cleaned = markdown;
+    let removed = 0;
+
+    const lines = cleaned.split("\n");
+    const processedLines: string[] = [];
+    let lastHeader = "";
+
+    lines.forEach((line) => {
+        // Detectar números de página
+        if (line.match(/^\s*(?:Página|Page|Pág\.?)\s+\d+\s*$/i)) {
+            removed++;
+            return; // Skip
+        }
+
+        // Detectar encabezados repetitivos
+        if (line.match(/^#{1,6}\s+/)) {
+            if (line === lastHeader) {
+                removed++;
+                return; // Skip duplicate header
+            }
+            lastHeader = line;
+        }
+
+        processedLines.push(line);
+    });
+
+    cleaned = processedLines.join("\n");
+
+    return { cleaned, removed };
+}
+
+/**
+ * Normaliza espacios en blanco
+ */
+function normalizeWhitespace(markdown: string): string {
+    let cleaned = markdown;
+
+    // Máximo 2 líneas en blanco consecutivas
+    cleaned = cleaned.replace(/\n\n\n+/g, "\n\n");
+
+    // Trim espacios finales en líneas
+    cleaned = cleaned
+        .split("\n")
+        .map((line) => line.trimEnd())
+        .join("\n");
+
+    // Trim inicio y final
+    cleaned = cleaned.trim();
+
+    return cleaned;
+}
+
+/**
+ * Valida y limpia Markdown jurídico (VERSIÓN 2)
  */
 export function validateAndCleanMarkdown(
     markdown: string,
@@ -34,84 +158,67 @@ export function validateAndCleanMarkdown(
     const anomalies: ValidationResult["anomalies"] = [];
     let cleaned = markdown;
 
-    // 1. Detectar y eliminar encabezados repetitivos
-    const lines = cleaned.split("\n");
-    const seenHeaders = new Set<string>();
-    const cleanedLines: string[] = [];
-
-    lines.forEach((line, idx) => {
-        if (line.match(/^#{1,6}\s+/)) {
-            // Es un encabezado
-            if (seenHeaders.has(line)) {
-                anomalies.push({
-                    type: "repeated_header",
-                    location: `line ${idx}`,
-                    severity: "medium",
-                    description: `Encabezado repetido: "${line}"`,
-                    action_taken: "Eliminado",
-                });
-            } else {
-                seenHeaders.add(line);
-                cleanedLines.push(line);
-            }
-        } else {
-            cleanedLines.push(line);
-        }
-    });
-
-    cleaned = cleanedLines.join("\n");
-
-    // 2. Eliminar líneas en blanco excesivas (más de 2 consecutivas)
-    cleaned = cleaned.replace(/\n\n\n+/g, "\n\n");
-
-    // 3. Detectar números de página típicos
-    const pageNumberPattern = /^[\s]*(?:Página|Page|Pág\.?)\s+\d+[\s]*$/gm;
-    const pageMatches = cleaned.match(pageNumberPattern);
-    if (pageMatches) {
+    // 1. Limpiar tablas rotas
+    const { cleaned: cleanedTables, issues: tableIssues } = cleanMalformedTables(cleaned);
+    cleaned = cleanedTables;
+    if (tableIssues > 0) {
         anomalies.push({
-            type: "page_numbers_detected",
-            severity: "low",
-            description: `${pageMatches.length} números de página detectados`,
-            action_taken: "Filtrados",
+            type: "malformed_tables_fixed",
+            severity: "medium",
+            description: `${tableIssues} tabla(s) mal formateada(s) corregida(s)`,
+            action_taken: "Convertidas a párrafos o rehacidas",
         });
-        cleaned = cleaned.replace(pageNumberPattern, "");
     }
 
-    // 4. Detectar tablas mal formateadas
-    const tablePattern = /\|[^\n]*\|/g;
-    const tables = cleaned.match(tablePattern) || [];
-    tables.forEach((table, idx) => {
-        // Verificar que tenga mínimo 3 pipes (estructura válida)
-        if ((table.match(/\|/g) || []).length < 4) {
-            anomalies.push({
-                type: "malformed_table",
-                location: `table ${idx}`,
-                severity: "medium",
-                description: "Tabla con estructura incompleta",
-                action_taken: "Marcada para revisión manual",
-            });
-        }
-    });
+    // 2. Remover números de página y headers repetitivos
+    const { cleaned: cleanedPages, removed: removedCount } = removePageHeaders(cleaned);
+    cleaned = cleanedPages;
+    if (removedCount > 0) {
+        anomalies.push({
+            type: "page_elements_removed",
+            severity: "low",
+            description: `${removedCount} número(s) de página y encabezados repetidos eliminados`,
+            action_taken: "Filtrados automáticamente",
+        });
+    }
 
-    // 5. Trim final
-    cleaned = cleaned.trim();
+    // 3. Normalizar espacios en blanco
+    cleaned = normalizeWhitespace(cleaned);
 
-    // Generar hashes
+    // 4. Extraer elementos legales
+    const legalElements = extractLegalElements(cleaned);
+
+    // 5. Detectar posibles anomalías adicionales
+    if (!legalElements.expediente) {
+        anomalies.push({
+            type: "missing_expediente",
+            severity: "low",
+            description: "No se detectó número de expediente",
+            action_taken: "Requiere revisión manual",
+        });
+    }
+
+    if (cleaned.length < 100) {
+        anomalies.push({
+            type: "short_document",
+            severity: "high",
+            description: "Documento muy corto (<100 caracteres)",
+            action_taken: "Verificar que OCR fue exitoso",
+        });
+    }
+
+    // 6. Generar hashes
     const hashOriginal = generateHash(originalBuffer);
     const hashMarkdown = generateHash(cleaned);
 
-    // Determinar status
+    // 7. Determinar status de validación
     let validationStatus: "OK" | "ALERT" | "FAILED" = "OK";
-    const highSeverityCount = anomalies.filter(
-        (a) => a.severity === "high"
-    ).length;
-    const mediumSeverityCount = anomalies.filter(
-        (a) => a.severity === "medium"
-    ).length;
+    const highSeverityCount = anomalies.filter((a) => a.severity === "high").length;
+    const mediumSeverityCount = anomalies.filter((a) => a.severity === "medium").length;
 
     if (highSeverityCount > 0) {
         validationStatus = "FAILED";
-    } else if (mediumSeverityCount > 2) {
+    } else if (mediumSeverityCount > 1) {
         validationStatus = "ALERT";
     }
 
@@ -121,11 +228,13 @@ export function validateAndCleanMarkdown(
         validation_status: validationStatus,
         anomalies,
         cleaned_markdown: cleaned,
+        structure_preserved: legalElements.articulos > 0,
+        legal_elements: legalElements,
     };
 }
 
 /**
- * Genera certificado forense
+ * Genera certificado forense robusto
  */
 export function generateForensicCertificate(
     validation: ValidationResult,
@@ -135,13 +244,16 @@ export function generateForensicCertificate(
         hash_original: validation.hash_original,
         hash_markdown: validation.hash_markdown,
         digital_signature: generateHash(
-            validation.hash_original + validation.hash_markdown
+            validation.hash_original + validation.hash_markdown + Date.now()
         ),
+        signing_key_id: "gomas-lab-v2-" + new Date().getFullYear(),
         vlm_used: vlmUsed,
-        algorithm_version: "1.0",
+        algorithm_version: "2.0",
         timestamp: new Date().toISOString(),
         validation_status: validation.validation_status,
         integrity_verified: validation.validation_status !== "FAILED",
         anomalies_count: validation.anomalies.length,
+        structure_preserved: validation.structure_preserved,
+        legal_elements_detected: validation.legal_elements,
     };
 }

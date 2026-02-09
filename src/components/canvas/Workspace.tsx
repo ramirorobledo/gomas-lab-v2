@@ -120,10 +120,10 @@ export function Workspace() {
                         />
                     ) : (
                         <div className="h-full flex items-center justify-center text-slate-400 border-2 border-dashed border-slate-700 rounded-lg">
-                            <p className="text-center">
+                            <div className="text-center">
                                 <p className="text-lg mb-2">📄</p>
-                                Sube un documento para comenzar
-                            </p>
+                                <p>Sube un documento para comenzar</p>
+                            </div>
                         </div>
                     )}
                 </div>
