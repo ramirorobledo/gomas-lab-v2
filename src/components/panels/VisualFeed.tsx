@@ -30,6 +30,21 @@ export function VisualFeed({
         { id: "anomalies", label: "Anomalías", icon: "⚠️" },
     ];
 
+    const handleDownloadMarkdown = () => {
+        if (!markdown) return;
+
+        const element = document.createElement('a');
+        element.setAttribute(
+            'href',
+            'data:text/plain;charset=utf-8,' + encodeURIComponent(markdown)
+        );
+        element.setAttribute('download', 'documento.md');
+        element.style.display = 'none';
+        document.body.appendChild(element);
+        element.click();
+        document.body.removeChild(element);
+    };
+
     return (
         <div className="visual-feed h-full flex flex-col bg-slate-950 rounded-lg border border-slate-800 overflow-hidden">
             {/* Tab Navigation */}
@@ -50,6 +65,18 @@ export function VisualFeed({
                         {tab.label}
                     </button>
                 ))}
+            </div>
+
+            {/* Download Buttons */}
+            <div className="download-buttons px-4 py-3 bg-slate-900/30 border-b border-slate-800 flex gap-2">
+                <button
+                    onClick={handleDownloadMarkdown}
+                    disabled={!markdown}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold rounded transition-colors flex items-center gap-2"
+                >
+                    <span>⬇️</span>
+                    Descargar Markdown
+                </button>
             </div>
 
             {/* Tab Content */}
