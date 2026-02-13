@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+function sanitizeFilename(name: string): string {
+    return name
+        .replace(/["\n\r\0]/g, '')
+        .replace(/[^a-z0-9._\-]/gi, '_')
+        .slice(0, 255);
+}
+
 export async function POST(request: NextRequest) {
     try {
         const { name, markdown } = await request.json();
@@ -11,14 +18,14 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Crear archivo Markdown
+        const safeName = sanitizeFilename(name);
         const buffer = Buffer.from(markdown, 'utf-8');
 
         return new NextResponse(buffer, {
             status: 200,
             headers: {
                 'Content-Type': 'text/markdown; charset=utf-8',
-                'Content-Disposition': `attachment; filename="${name}.md"`,
+                'Content-Disposition': `attachment; filename="${safeName}.md"`,
             },
         });
     } catch (error) {
