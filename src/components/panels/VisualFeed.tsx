@@ -46,20 +46,20 @@ export function VisualFeed({
     };
 
     return (
-        <div className="visual-feed h-full flex flex-col bg-slate-950 rounded-lg border border-slate-800 overflow-hidden">
+        <div className="visual-feed h-full flex flex-col bg-panel/30 backdrop-blur-sm rounded-sm border border-primary/30 overflow-hidden">
             {/* Tab Navigation */}
-            <div className="tab-nav flex gap-0 bg-slate-900/50 border-b border-slate-800">
+            <div className="tab-nav flex gap-0 bg-panel/50 border-b border-border">
                 {tabs.map((tab) => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
                         className={`
-              flex-1 px-4 py-3 text-sm font-medium transition-all border-b-2
-              ${activeTab === tab.id
-                                ? "bg-indigo-900/30 text-indigo-400 border-indigo-500"
-                                : "bg-transparent text-slate-400 border-transparent hover:text-slate-300"
+                            flex-1 px-4 py-3 text-xs font-tech transition-all border-b-2 uppercase tracking-wider
+                            ${activeTab === tab.id
+                                ? "bg-primary/10 text-primary border-primary"
+                                : "bg-transparent text-muted border-transparent hover:text-primary/70"
                             }
-            `}
+                        `}
                     >
                         <span className="mr-2">{tab.icon}</span>
                         {tab.label}
@@ -67,15 +67,14 @@ export function VisualFeed({
                 ))}
             </div>
 
-            {/* Download Buttons */}
-            <div className="download-buttons px-4 py-3 bg-slate-900/30 border-b border-slate-800 flex gap-2">
+            {/* Download Button */}
+            <div className="download-section px-4 py-3 bg-panel/30 border-b border-border flex gap-2">
                 <button
                     onClick={handleDownloadMarkdown}
                     disabled={!markdown}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold rounded transition-colors flex items-center gap-2"
+                    className="px-4 py-2 bg-primary/20 hover:bg-primary/40 disabled:bg-gray-800 disabled:cursor-not-allowed text-primary disabled:text-gray-600 font-tech rounded-sm transition-all border border-primary/50 text-xs uppercase tracking-wider shadow-[0_0_10px_rgba(99,102,241,0.1)]"
                 >
-                    <span>⬇️</span>
-                    Descargar Markdown
+                    ⬇️ Descargar Markdown
                 </button>
             </div>
 

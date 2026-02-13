@@ -4,19 +4,25 @@ import { useState } from "react";
 
 interface SidebarProps {
     activeTab: string;
-    onSwitchView: (view: string) => void;
+    onSwitchTab: (tab: string) => void;
+    certificateData?: any;
 }
 
-export default function Sidebar({ activeTab, onSwitchView }: SidebarProps) {
+export default function Sidebar({ activeTab, onSwitchTab, certificateData }: SidebarProps) {
     const [isOpen, setIsOpen] = useState(false);
+
+    const tabs = [
+        { id: "certificate", label: "Certificado", icon: "📜" },
+        { id: "console", label: "Console", icon: "⚙️" },
+        { id: "status", label: "Status", icon: "📊" },
+    ];
 
     return (
         <>
-            {/* Mobile Hamburger Button */}
+            {/* Mobile Hamburger */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-panel border border-primary/30 rounded-sm"
-                aria-label="Toggle menu"
             >
                 <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     {isOpen ? (
@@ -27,7 +33,7 @@ export default function Sidebar({ activeTab, onSwitchView }: SidebarProps) {
                 </svg>
             </button>
 
-            {/* Mobile Overlay */}
+            {/* Overlay */}
             {isOpen && (
                 <div
                     className="lg:hidden fixed inset-0 bg-black/80 z-30"
@@ -38,103 +44,127 @@ export default function Sidebar({ activeTab, onSwitchView }: SidebarProps) {
             {/* Sidebar */}
             <aside className={`
                 fixed lg:relative
-                w-72 h-full
-                bg-base border-r border-[#262626] 
-                flex flex-col justify-between 
+                w-80 h-full
+                bg-base border-r border-border
+                flex flex-col
                 z-40
-                transform transition-transform duration-300 ease-in-out
+                transform transition-transform duration-300
                 ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
             `}>
-                <div className="p-6 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-2 opacity-20 text-[10px] font-tech text-primary">
-                        SYS.V2.0
-                    </div>
-                    <h1 className="font-tech font-black text-2xl tracking-widest text-white uppercase glow-text">
-                        GOMAS<span className="text-primary">LAB</span>
+                {/* Header */}
+                <div className="p-6 border-b border-border bg-panel/30">
+                    <h1 className="font-tech font-black text-xl tracking-widest text-primary glow-text uppercase">
+                        GOMAS<span className="text-white">LAB</span>
                     </h1>
                     <div className="flex items-center gap-2 mt-2">
                         <div className="h-1 w-1 bg-success rounded-full animate-pulse"></div>
-                        <p className="text-[10px] font-data text-primary tracking-[0.2em] uppercase">
+                        <p className="text-[10px] font-data text-primary tracking-widest uppercase">
                             Forensic Edition
                         </p>
                     </div>
-                    <div className="mt-4 w-full h-[1px] bg-gradient-to-r from-primary/50 to-transparent"></div>
                 </div>
 
-                <nav className="flex-1 px-4 space-y-1 mt-2">
-                    <div
-                        onClick={() => { onSwitchView("ocr"); setIsOpen(false); }}
-                        className={`group flex items-center gap-4 px-4 py-4 rounded-sm border border-transparent hover:border-primary/30 hover:bg-primary/5 cursor-pointer transition-all ${activeTab === "ocr" ? "active-nav" : ""
-                            }`}
-                    >
-                        <div className="text-xs font-tech text-muted group-[.active-nav]:text-primary w-6 text-center">
-                            01
-                        </div>
-                        <div className="flex-1">
-                            <div className="text-sm font-bold text-gray-300 group-[.active-nav]:text-white tracking-wide uppercase font-tech">
-                                OCR VLM Forense
+                {/* Tabs */}
+                <nav className="flex-1 px-4 space-y-2 mt-4 overflow-auto">
+                    {tabs.map((tab) => (
+                        <button
+                            key={tab.id}
+                            onClick={() => {
+                                onSwitchTab(tab.id);
+                                setIsOpen(false);
+                            }}
+                            className={`
+                                w-full group flex items-center gap-4 px-4 py-4 rounded-sm border transition-all
+                                ${activeTab === tab.id
+                                    ? "bg-primary/10 border-primary/50 text-primary"
+                                    : "bg-transparent border-transparent text-muted hover:border-primary/30 hover:bg-primary/5"
+                                }
+                            `}
+                        >
+                            <span className="text-lg">{tab.icon}</span>
+                            <div className="flex-1 text-left">
+                                <div className="text-sm font-tech uppercase tracking-wider">{tab.label}</div>
                             </div>
-                            <div className="text-[10px] text-gray-600 font-data group-[.active-nav]:text-primary/70">
-                                Analysis & Extraction
-                            </div>
-                        </div>
-                        <div className="w-1 h-1 bg-gray-700 group-[.active-nav]:bg-primary group-[.active-nav]:shadow-[0_0_8px_rgba(99,102,241,0.8)]"></div>
-                    </div>
-
-                    <div
-                        onClick={() => { onSwitchView("studio"); setIsOpen(false); }}
-                        className={`group flex items-center gap-4 px-4 py-4 rounded-sm border border-transparent hover:border-primary/30 hover:bg-primary/5 cursor-pointer transition-all ${activeTab === "studio" ? "active-nav" : ""
-                            }`}
-                    >
-                        <div className="text-xs font-tech text-muted group-[.active-nav]:text-primary w-6 text-center">
-                            02
-                        </div>
-                        <div className="flex-1">
-                            <div className="text-sm font-bold text-gray-300 group-[.active-nav]:text-white tracking-wide uppercase font-tech">
-                                Gomas IA
-                            </div>
-                            <div className="text-[10px] text-gray-600 font-data group-[.active-nav]:text-primary/70">
-                                En Construcción
-                            </div>
-                        </div>
-                        <div className="w-1 h-1 bg-gray-700 group-[.active-nav]:bg-primary group-[.active-nav]:shadow-[0_0_8px_rgba(99,102,241,0.8)]"></div>
-                    </div>
-
-                    <div
-                        onClick={() => { onSwitchView("history"); setIsOpen(false); }}
-                        className={`group flex items-center gap-4 px-4 py-4 rounded-sm border border-transparent hover:border-primary/30 hover:bg-primary/5 cursor-pointer transition-all ${activeTab === "history" ? "active-nav" : ""
-                            }`}
-                    >
-                        <div className="text-xs font-tech text-muted group-[.active-nav]:text-primary w-6 text-center">
-                            03
-                        </div>
-                        <div className="flex-1">
-                            <div className="text-sm font-bold text-gray-300 group-[.active-nav]:text-white tracking-wide uppercase font-tech">
-                                Historial
-                            </div>
-                            <div className="text-[10px] text-gray-600 font-data group-[.active-nav]:text-primary/70">
-                                Conversion Logs
-                            </div>
-                        </div>
-                        <div className="w-1 h-1 bg-gray-700 group-[.active-nav]:bg-primary group-[.active-nav]:shadow-[0_0_8px_rgba(99,102,241,0.8)]"></div>
-                    </div>
+                            <div className={`w-1 h-1 rounded-full transition-all ${activeTab === tab.id ? "bg-primary shadow-[0_0_8px_rgba(99,102,241,0.8)]" : "bg-gray-700"
+                                }`}></div>
+                        </button>
+                    ))}
                 </nav>
 
-                <div className="p-4 border-t border-[#262626] bg-panel">
+                {/* Content Panels */}
+                <div className="flex-1 overflow-auto p-4 border-t border-border">
+                    {/* Certificate Tab */}
+                    {activeTab === "certificate" && (
+                        <div className="glass-panel p-4 rounded-sm border border-primary/30">
+                            <h3 className="font-tech text-primary uppercase text-xs tracking-widest mb-4">Validación Forense</h3>
+                            {certificateData ? (
+                                <div className="space-y-3 text-[11px]">
+                                    <div className="border-l-2 border-primary pl-3">
+                                        <p className="text-muted font-mono">Status</p>
+                                        <p className="text-success font-tech">✓ CERTIFIED</p>
+                                    </div>
+                                    <div className="border-l-2 border-primary pl-3">
+                                        <p className="text-muted font-mono">Score</p>
+                                        <p className="text-primary font-data">90%</p>
+                                    </div>
+                                    <div className="border-l-2 border-primary pl-3">
+                                        <p className="text-muted font-mono">Hash SHA256</p>
+                                        <p className="text-gray-400 font-mono truncate text-[10px]">a1b2c3d4...</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-center text-muted text-xs font-data">
+                                    Procesa un documento para ver el certificado
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Console Tab */}
+                    {activeTab === "console" && (
+                        <div className="glass-panel p-4 rounded-sm border border-primary/30 font-mono text-[10px]">
+                            <h3 className="font-tech text-primary uppercase text-xs tracking-widest mb-4">System Console</h3>
+                            <div className="bg-black/50 p-3 rounded h-64 overflow-auto border border-primary/20">
+                                <p className="text-muted">&gt; Sistema listo</p>
+                                <p className="text-muted">&gt; Esperando documento...</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Status Tab */}
+                    {activeTab === "status" && (
+                        <div className="glass-panel p-4 rounded-sm border border-primary/30 space-y-4">
+                            <h3 className="font-tech text-primary uppercase text-xs tracking-widest">Status del Sistema</h3>
+                            <div className="space-y-2 text-[10px]">
+                                <div className="flex justify-between">
+                                    <span className="text-muted">Procesados</span>
+                                    <span className="text-primary font-data">0</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-muted">Tiempo</span>
+                                    <span className="text-primary font-data">0ms</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-muted">Conectado</span>
+                                    <span className="text-success font-data">ONLINE</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 border-t border-border bg-panel/30">
                     <div className="flex justify-between items-end mb-2">
-                        <span className="text-[10px] text-muted font-tech">SYSTEM STATUS</span>
-                        <span className="text-[10px] text-success font-data animate-pulse">
-                            ONLINE
-                        </span>
+                        <span className="text-[10px] text-muted font-tech">SYSTEM</span>
+                        <span className="text-[10px] text-success font-data animate-pulse">ONLINE</span>
                     </div>
-                    <div className="flex gap-1 h-1 w-full mb-1">
+                    <div className="flex gap-1 h-1">
                         <div className="flex-1 bg-primary/40"></div>
                         <div className="flex-1 bg-primary/30"></div>
                         <div className="flex-1 bg-primary/20"></div>
-                        <div className="w-2 bg-transparent"></div>
                         <div className="w-8 bg-success/50"></div>
                     </div>
-                    <div className="text-[10px] text-dim font-mono">gomas.forensic.v2</div>
                 </div>
             </aside>
         </>
