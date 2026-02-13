@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+if (typeof window !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.js`;
+}
 
 interface PDFViewerProps {
     file: File;

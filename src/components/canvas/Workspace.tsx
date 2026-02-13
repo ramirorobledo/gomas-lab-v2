@@ -6,6 +6,7 @@ import Sidebar from "../hud/Sidebar";
 import SystemHeader from "../hud/SystemHeader";
 import Dropzone from "./Dropzone";
 import { VisualFeed } from "../panels/VisualFeed";
+import ExtractionList from "../panels/ExtractionList";
 
 const PDFViewer = dynamic(() => import("../panels/PDFViewer"), {
     ssr: false,
@@ -118,8 +119,18 @@ export function Workspace() {
                             </div>
                         )}
 
-                        {/* Process Button */}
-                        {file && !processed && !showPDFViewer && (
+                        {/* Extractions List */}
+                        {file && !processed && extractionRanges.length > 0 && !showPDFViewer && (
+                            <ExtractionList
+                                ranges={extractionRanges}
+                                onRemove={(idx) => setExtractionRanges(extractionRanges.filter((_, i) => i !== idx))}
+                                onProcess={handleProcess}
+                                isProcessing={processing}
+                            />
+                        )}
+
+                        {/* Process Button - Show only if no extractions */}
+                        {file && !processed && extractionRanges.length === 0 && !showPDFViewer && (
                             <button
                                 onClick={handleProcess}
                                 disabled={processing}
@@ -145,30 +156,29 @@ export function Workspace() {
                         )}
 
                         {/* System Console */}
-                        <div className="glass-panel p-4 rounded-sm border border-primary/30 flex-1 flex flex-col overflow-hidden">
-                            <h3 className="font-tech text-primary uppercase text-xs tracking-widest mb-3">System Console</h3>
-                            <div className="bg-black/60 p-3 rounded flex-1 overflow-auto border border-primary/20 font-mono text-[10px] space-y-1">
-                                <p className="text-muted">&gt; Sistema inicializado</p>
-                                <p className="text-muted">&gt; Esperando documento...</p>
-                                {file && <p className="text-primary">&gt; [PDF] Archivo cargado: {file.name}</p>}
-                                {extractionRanges.length > 0 && (
-                                    <p className="text-primary">&gt; [EXTRACT] {extractionRanges.length} rango(s) seleccionado(s)</p>
-                                )}
-                                {processing && (
-                                    <>
-                                        <p className="text-primary">&gt; [OCR] Extrayendo texto...</p>
-                                        <p className="text-primary">&gt; [VLM] Analizando estructura...</p>
-                                        <p className="text-primary">&gt; [PageIndex] Mapeando contenido...</p>
-                                    </>
-                                )}
-                                {processed && (
-                                    <>
-                                        <p className="text-success">&gt; ✓ Procesamiento completado</p>
-                                        <p className="text-success">&gt; ✓ Documento validado</p>
-                                    </>
-                                )}
+                        {!showPDFViewer && extractionRanges.length === 0 && (
+                            <div className="glass-panel p-4 rounded-sm border border-primary/30 flex-1 flex flex-col overflow-hidden">
+                                <h3 className="font-tech text-primary uppercase text-xs tracking-widest mb-3">System Console</h3>
+                                <div className="bg-black/60 p-3 rounded flex-1 overflow-auto border border-primary/20 font-mono text-[10px] space-y-1">
+                                    <p className="text-muted">&gt; Sistema inicializado</p>
+                                    <p className="text-muted">&gt; Esperando documento...</p>
+                                    {file && <p className="text-primary">&gt; [PDF] Archivo cargado: {file.name}</p>}
+                                    {processing && (
+                                        <>
+                                            <p className="text-primary">&gt; [OCR] Extrayendo texto...</p>
+                                            <p className="text-primary">&gt; [VLM] Analizando estructura...</p>
+                                            <p className="text-primary">&gt; [PageIndex] Mapeando contenido...</p>
+                                        </>
+                                    )}
+                                    {processed && (
+                                        <>
+                                            <p className="text-success">&gt; ✓ Procesamiento completado</p>
+                                            <p className="text-success">&gt; ✓ Documento validado</p>
+                                        </>
+                                    )}
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
 
                     {/* RIGHT: Live Preview */}
