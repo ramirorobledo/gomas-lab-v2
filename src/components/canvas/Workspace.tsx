@@ -1,10 +1,16 @@
 "use client";
 
 import React, { useState } from "react";
+import dynamic from "next/dynamic";
 import Sidebar from "../hud/Sidebar";
 import SystemHeader from "../hud/SystemHeader";
 import Dropzone from "./Dropzone";
 import { VisualFeed } from "../panels/VisualFeed";
+
+const PDFViewer = dynamic(() => import("../panels/PDFViewer"), {
+    ssr: false,
+    loading: () => <div className="text-center text-muted">Cargando visor...</div>,
+});
 
 interface ProcessedDocument {
     markdown: string;
@@ -13,14 +19,28 @@ interface ProcessedDocument {
     cost: number;
 }
 
+interface ExtractionRange {
+    from: number;
+    to: number;
+    name: string;
+}
+
 export function Workspace() {
     const [file, setFile] = useState<File | null>(null);
     const [processing, setProcessing] = useState(false);
     const [processed, setProcessed] = useState<ProcessedDocument | null>(null);
     const [activeTab, setActiveTab] = useState("certificate");
+    const [showPDFViewer, setShowPDFViewer] = useState(false);
+    const [extractionRanges, setExtractionRanges] = useState<ExtractionRange[]>([]);
 
     const handleFileDrop = (droppedFile: File) => {
         setFile(droppedFile);
+    };
+
+    const handleRangeSelect = (from: number, to: number) => {
+        const name = `extraction_${extractionRanges.length + 1}`;
+        setExtractionRanges([...extractionRanges, { from, to, name }]);
+        alert(`✓ Rango agregado: páginas ${from}-${to}`);
     };
 
     const handleProcess = async () => {
@@ -81,8 +101,25 @@ export function Workspace() {
                             />
                         </div>
 
-                        {/* Process Button */}
+                        {/* PDF Viewer Toggle Button */}
                         {file && !processed && (
+                            <button
+                                onClick={() => setShowPDFViewer(!showPDFViewer)}
+                                className="w-full px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white font-tech rounded-sm transition-all border border-border uppercase tracking-wider text-xs"
+                            >
+                                {showPDFViewer ? "🗂️ Ocultar Visor" : "📂 Ver PDF"}
+                            </button>
+                        )}
+
+                        {/* PDF Viewer */}
+                        {file && !processed && showPDFViewer && (
+                            <div className="flex-1 overflow-hidden">
+                                <PDFViewer file={file} onRangeSelect={handleRangeSelect} />
+                            </div>
+                        )}
+
+                        {/* Process Button */}
+                        {file && !processed && !showPDFViewer && (
                             <button
                                 onClick={handleProcess}
                                 disabled={processing}
@@ -98,6 +135,8 @@ export function Workspace() {
                                 onClick={() => {
                                     setFile(null);
                                     setProcessed(null);
+                                    setShowPDFViewer(false);
+                                    setExtractionRanges([]);
                                 }}
                                 className="w-full px-4 py-3 bg-gray-800 hover:bg-gray-700 text-white font-tech rounded-sm transition-all border border-border uppercase tracking-wider text-xs"
                             >
@@ -111,6 +150,10 @@ export function Workspace() {
                             <div className="bg-black/60 p-3 rounded flex-1 overflow-auto border border-primary/20 font-mono text-[10px] space-y-1">
                                 <p className="text-muted">&gt; Sistema inicializado</p>
                                 <p className="text-muted">&gt; Esperando documento...</p>
+                                {file && <p className="text-primary">&gt; [PDF] Archivo cargado: {file.name}</p>}
+                                {extractionRanges.length > 0 && (
+                                    <p className="text-primary">&gt; [EXTRACT] {extractionRanges.length} rango(s) seleccionado(s)</p>
+                                )}
                                 {processing && (
                                     <>
                                         <p className="text-primary">&gt; [OCR] Extrayendo texto...</p>
@@ -158,6 +201,7 @@ export function Workspace() {
                         </span></span>
                     </div>
                     <div className="text-muted">
+                        {extractionRanges.length > 0 && <span>EXTRACTIONS: <span className="text-primary">{extractionRanges.length}</span></span>}
                         {processed && <span>DOCUMENTOS: <span className="text-primary">1</span></span>}
                     </div>
                 </div>

@@ -44,8 +44,8 @@ export default function Dropzone({ onFileDrop, file, loading }: DropzoneProps) {
             />
 
             {!loading ? (
-                <label htmlFor="file-upload" className="w-full h-full flex flex-col items-center justify-center cursor-pointer">
-                    <div className="text-center relative z-10 pointer-events-none">
+                <label htmlFor="file-upload" className="w-full h-full flex flex-col items-center justify-center cursor-pointer z-10">
+                    <div className="text-center pointer-events-none">
                         <div className="w-20 h-20 mx-auto mb-6 flex items-center justify-center relative">
                             <div className="absolute inset-0 border border-primary/20 rounded-full animate-spin-slow"></div>
                             <div className="absolute inset-4 border border-dashed border-primary/40 rounded-full animate-reverse-spin"></div>
@@ -72,7 +72,7 @@ export default function Dropzone({ onFileDrop, file, loading }: DropzoneProps) {
                     </div>
                 </label>
             ) : (
-                <div className="text-center relative z-10 w-full">
+                <div className="text-center w-full z-10">
                     <div className="inline-block w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
                     <div className="font-tech text-xs text-primary uppercase tracking-widest animate-pulse">
                         PROCESSING...
