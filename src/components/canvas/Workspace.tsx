@@ -166,12 +166,6 @@ export function Workspace() {
                                             <p className="text-primary">&gt; [PageIndex] Mapeando contenido...</p>
                                         </>
                                     )}
-                                    {processed && (
-                                        <>
-                                            <p className="text-success">&gt; ✓ Procesamiento completado</p>
-                                            <p className="text-success">&gt; ✓ {processed.pageCount} páginas procesadas</p>
-                                        </>
-                                    )}
                                 </div>
                             </div>
                         )}

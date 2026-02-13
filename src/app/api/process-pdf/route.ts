@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { v4 as uuidv4 } from 'uuid';
-import { Pool } from 'pg';
+import { randomUUID } from 'crypto';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-});
 
 interface ExtractionRange {
     from: number;
@@ -66,7 +61,6 @@ export async function POST(request: NextRequest) {
         ]);
 
         const markdown = response.response.text();
-        const sessionId = uuidv4();
 
         // Tercero: Si hay rangos, procesarlos
         let extractions = [];
@@ -77,7 +71,6 @@ export async function POST(request: NextRequest) {
                 for (const range of ranges) {
                     console.log(`Extracting pages ${range.from}-${range.to}`);
 
-                    // Llamar a Gemini para extraer SOLO ese rango de páginas
                     const extractResponse = await model.generateContent([
                         {
                             inlineData: {
@@ -103,42 +96,27 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Guardar en BD
-        const insertQuery = `
-      INSERT INTO document_sessions (session_id, filename, markdown_content, page_index)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (session_id) DO NOTHING
-    `;
-
-        try {
-            await pool.query(insertQuery, [
-                sessionId,
-                file.name,
-                markdown,
-                JSON.stringify({ extractions, pageCount: totalPages }),
-            ]);
-        } catch (dbError) {
-            console.error('DB error:', dbError);
-        }
-
         const endTime = Date.now();
 
         return NextResponse.json({
             success: true,
-            sessionId,
+            conversionId: randomUUID(),
             filename: file.name,
             markdown,
-            extractions,
-            validationStatus: 'forensic_certified',
-            forensicScore: 95,
+            extractions: extractions.map((ext) => ({
+                id: randomUUID(),
+                name: ext.name,
+                from: ext.from,
+                to: ext.to,
+                markdown: ext.markdown,
+            })),
             pageCount: totalPages,
             processingTime: endTime - startTime,
-            issues: [],
         });
     } catch (error) {
         console.error('Error:', error);
         return NextResponse.json(
-            { error: 'Error processing PDF', details: String(error) },
+            { error: 'Error processing PDF' },
             { status: 500 }
         );
     }
