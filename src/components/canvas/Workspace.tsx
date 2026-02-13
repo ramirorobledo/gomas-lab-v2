@@ -1,17 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
-import dynamic from "next/dynamic";
 import Sidebar from "../hud/Sidebar";
 import SystemHeader from "../hud/SystemHeader";
 import Dropzone from "./Dropzone";
 import { VisualFeed } from "../panels/VisualFeed";
 import ExtractionList from "../panels/ExtractionList";
-
-const PDFViewer = dynamic(() => import("../panels/PDFViewer"), {
-    ssr: false,
-    loading: () => <div className="text-center text-muted">Cargando visor...</div>,
-});
 
 interface ProcessedDocument {
     markdown: string;
@@ -31,17 +25,22 @@ export function Workspace() {
     const [processing, setProcessing] = useState(false);
     const [processed, setProcessed] = useState<ProcessedDocument | null>(null);
     const [activeTab, setActiveTab] = useState("certificate");
-    const [showPDFViewer, setShowPDFViewer] = useState(false);
     const [extractionRanges, setExtractionRanges] = useState<ExtractionRange[]>([]);
+    const [numPages, setNumPages] = useState(0);
 
     const handleFileDrop = (droppedFile: File) => {
         setFile(droppedFile);
+        // Estimar páginas (aproximadamente 1KB = 1/3 página)
+        const estimatedPages = Math.ceil(droppedFile.size / 3000);
+        setNumPages(Math.max(estimatedPages, 10));
     };
 
-    const handleRangeSelect = (from: number, to: number) => {
-        const name = `extraction_${extractionRanges.length + 1}`;
+    const handleAddRange = (from: number, to: number, name: string) => {
         setExtractionRanges([...extractionRanges, { from, to, name }]);
-        alert(`✓ Rango agregado: páginas ${from}-${to}`);
+    };
+
+    const handleRemoveRange = (idx: number) => {
+        setExtractionRanges(extractionRanges.filter((_, i) => i !== idx));
     };
 
     const handleProcess = async () => {
@@ -52,6 +51,7 @@ export function Workspace() {
         try {
             const formData = new FormData();
             formData.append("file", file);
+            formData.append("ranges", JSON.stringify(extractionRanges));
 
             const response = await fetch("/api/process-pdf", {
                 method: "POST",
@@ -91,7 +91,7 @@ export function Workspace() {
 
                 {/* MAIN WORKSPACE */}
                 <div className="workspace-content flex-1 flex gap-6 p-6 overflow-hidden">
-                    {/* CENTER: Upload & Console */}
+                    {/* CENTER: Upload & Extractions */}
                     <div className="workspace-center w-2/5 flex flex-col gap-4 overflow-hidden">
                         {/* Dropzone */}
                         <div className="flex-1">
@@ -102,41 +102,26 @@ export function Workspace() {
                             />
                         </div>
 
-                        {/* PDF Viewer Toggle Button */}
+                        {/* Extractions Manager - Show when file uploaded */}
                         {file && !processed && (
-                            <button
-                                onClick={() => setShowPDFViewer(!showPDFViewer)}
-                                className="w-full px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white font-tech rounded-sm transition-all border border-border uppercase tracking-wider text-xs"
-                            >
-                                {showPDFViewer ? "🗂️ Ocultar Visor" : "📂 Ver PDF"}
-                            </button>
-                        )}
-
-                        {/* PDF Viewer */}
-                        {file && !processed && showPDFViewer && (
-                            <div className="flex-1 overflow-hidden">
-                                <PDFViewer file={file} onRangeSelect={handleRangeSelect} />
-                            </div>
-                        )}
-
-                        {/* Extractions List */}
-                        {file && !processed && extractionRanges.length > 0 && !showPDFViewer && (
                             <ExtractionList
                                 ranges={extractionRanges}
-                                onRemove={(idx) => setExtractionRanges(extractionRanges.filter((_, i) => i !== idx))}
+                                onAdd={handleAddRange}
+                                onRemove={handleRemoveRange}
                                 onProcess={handleProcess}
                                 isProcessing={processing}
+                                maxPages={numPages}
                             />
                         )}
 
-                        {/* Process Button - Show only if no extractions */}
-                        {file && !processed && extractionRanges.length === 0 && !showPDFViewer && (
+                        {/* Process All Button - Only if no extractions selected */}
+                        {file && !processed && extractionRanges.length === 0 && (
                             <button
                                 onClick={handleProcess}
                                 disabled={processing}
                                 className="w-full px-4 py-3 bg-primary/20 hover:bg-primary/40 disabled:bg-gray-700 text-white font-tech rounded-sm transition-all border border-primary/50 uppercase tracking-wider text-xs shadow-[0_0_15px_rgba(99,102,241,0.2)]"
                             >
-                                {processing ? "⏳ Procesando..." : "▶️ Procesar"}
+                                {processing ? "⏳ Procesando..." : "▶️ Procesar Documento Completo"}
                             </button>
                         )}
 
@@ -146,8 +131,8 @@ export function Workspace() {
                                 onClick={() => {
                                     setFile(null);
                                     setProcessed(null);
-                                    setShowPDFViewer(false);
                                     setExtractionRanges([]);
+                                    setNumPages(0);
                                 }}
                                 className="w-full px-4 py-3 bg-gray-800 hover:bg-gray-700 text-white font-tech rounded-sm transition-all border border-border uppercase tracking-wider text-xs"
                             >
@@ -156,13 +141,21 @@ export function Workspace() {
                         )}
 
                         {/* System Console */}
-                        {!showPDFViewer && extractionRanges.length === 0 && (
+                        {!processed && (
                             <div className="glass-panel p-4 rounded-sm border border-primary/30 flex-1 flex flex-col overflow-hidden">
                                 <h3 className="font-tech text-primary uppercase text-xs tracking-widest mb-3">System Console</h3>
                                 <div className="bg-black/60 p-3 rounded flex-1 overflow-auto border border-primary/20 font-mono text-[10px] space-y-1">
                                     <p className="text-muted">&gt; Sistema inicializado</p>
                                     <p className="text-muted">&gt; Esperando documento...</p>
-                                    {file && <p className="text-primary">&gt; [PDF] Archivo cargado: {file.name}</p>}
+                                    {file && (
+                                        <>
+                                            <p className="text-primary">&gt; [PDF] Archivo cargado: {file.name}</p>
+                                            <p className="text-primary">&gt; [PAGES] Estimado: {numPages} páginas</p>
+                                        </>
+                                    )}
+                                    {extractionRanges.length > 0 && (
+                                        <p className="text-primary">&gt; [EXTRACT] {extractionRanges.length} rango(s) configurado(s)</p>
+                                    )}
                                     {processing && (
                                         <>
                                             <p className="text-primary">&gt; [OCR] Extrayendo texto...</p>
@@ -195,7 +188,7 @@ export function Workspace() {
                                 <div className="text-center">
                                     <p className="text-4xl mb-4">📄</p>
                                     <p className="text-primary font-tech uppercase tracking-widest">Sube un documento</p>
-                                    <p className="text-xs text-muted mt-2 font-data">para ver preview en tiempo real</p>
+                                    <p className="text-xs text-muted mt-2 font-data">para gestionar extracciones</p>
                                 </div>
                             </div>
                         )}
@@ -211,8 +204,8 @@ export function Workspace() {
                         </span></span>
                     </div>
                     <div className="text-muted">
-                        {extractionRanges.length > 0 && <span>EXTRACTIONS: <span className="text-primary">{extractionRanges.length}</span></span>}
-                        {processed && <span>DOCUMENTOS: <span className="text-primary">1</span></span>}
+                        {extractionRanges.length > 0 && <span>RANGES: <span className="text-primary">{extractionRanges.length}</span></span>}
+                        {processed && <span>COMPLETE: <span className="text-success">✓</span></span>}
                     </div>
                 </div>
             </div>
