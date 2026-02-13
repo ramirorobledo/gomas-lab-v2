@@ -22,6 +22,14 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'No file provided' }, { status: 400 });
         }
 
+        const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+        if (file.size > MAX_FILE_SIZE) {
+            return NextResponse.json(
+                { error: `File too large. Max 50MB, received ${(file.size / 1024 / 1024).toFixed(2)}MB` },
+                { status: 413 }
+            );
+        }
+
         console.log(`Processing: ${file.name}`);
 
         const arrayBuffer = await file.arrayBuffer();
