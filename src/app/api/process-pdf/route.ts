@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { randomUUID } from 'crypto';
+import { validateAndCleanMarkdown, generateForensicCertificate } from '@/lib/validation';
+import { buildPageIndexTree } from '@/lib/pageindex';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -73,6 +75,25 @@ export async function POST(request: NextRequest) {
 
         const markdown = response.response.text();
 
+        // Validación forense + limpieza de markdown
+        const originalBuffer = Buffer.from(arrayBuffer);
+        const validation = validateAndCleanMarkdown(markdown, originalBuffer);
+        const cleanedMarkdown = validation.cleaned_markdown;
+
+        // Certificado forense
+        const certificate = generateForensicCertificate(validation, 'gemini-2.0-flash');
+
+        // PageIndex tree
+        const pageIndexTree = buildPageIndexTree(cleanedMarkdown, {
+            expediente: validation.legal_elements.expediente,
+            juzgado: validation.legal_elements.juzgado,
+        });
+
+        // Validation score (derived from anomalies)
+        const highCount = validation.anomalies.filter(a => a.severity === 'high').length;
+        const mediumCount = validation.anomalies.filter(a => a.severity === 'medium').length;
+        const validationScore = Math.max(0, 1.0 - (highCount * 0.3) - (mediumCount * 0.1));
+
         // Tercero: Si hay rangos, procesarlos
         let extractions = [];
         if (rangesStr) {
@@ -114,7 +135,7 @@ export async function POST(request: NextRequest) {
             sessionId,
             conversionId: randomUUID(),
             filename: file.name,
-            markdown,
+            markdown: cleanedMarkdown,
             extractions: extractions.map((ext) => ({
                 id: randomUUID(),
                 name: ext.name,
@@ -122,6 +143,17 @@ export async function POST(request: NextRequest) {
                 to: ext.to,
                 markdown: ext.markdown,
             })),
+            certificate: {
+                hash_original: certificate.hash_original,
+                hash_markdown: certificate.hash_markdown,
+                digital_signature: certificate.digital_signature,
+                timestamp: certificate.timestamp,
+                status: certificate.validation_status,
+            },
+            anomalies: validation.anomalies,
+            validationStatus: validation.validation_status,
+            validationScore,
+            pageIndexTree,
             pageCount: totalPages,
             processingTime: endTime - startTime,
         });
