@@ -14,6 +14,9 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now();
 
     try {
+        const sessionId = request.headers.get('X-Session-ID') || 'unknown';
+        console.log(`Processing for session: ${sessionId}`);
+
         const formData = await request.formData();
         const file = formData.get('file') as File;
         const rangesStr = formData.get('ranges') as string;
@@ -108,6 +111,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             success: true,
+            sessionId,
             conversionId: randomUUID(),
             filename: file.name,
             markdown,
