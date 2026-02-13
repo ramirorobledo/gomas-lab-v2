@@ -11,6 +11,8 @@ interface ProcessedDocument {
     markdown: string;
     certificateData: any;
     anomalies: any[];
+    extractions?: any[];
+    pageCount: number;
     cost: number;
 }
 
@@ -30,9 +32,7 @@ export function Workspace() {
 
     const handleFileDrop = (droppedFile: File) => {
         setFile(droppedFile);
-        // Estimar páginas (aproximadamente 1KB = 1/3 página)
-        const estimatedPages = Math.ceil(droppedFile.size / 3000);
-        setNumPages(Math.max(estimatedPages, 10));
+        setNumPages(0);
     };
 
     const handleAddRange = (from: number, to: number, name: string) => {
@@ -61,10 +61,13 @@ export function Workspace() {
             if (!response.ok) throw new Error("Processing failed");
 
             const data = await response.json();
+            setNumPages(data.pageCount);
             setProcessed({
                 markdown: data.markdown,
                 certificateData: data.certificateData,
                 anomalies: data.anomalies || [],
+                extractions: data.extractions || [],
+                pageCount: data.pageCount,
                 cost: data.cost,
             });
         } catch (error) {
@@ -110,7 +113,7 @@ export function Workspace() {
                                 onRemove={handleRemoveRange}
                                 onProcess={handleProcess}
                                 isProcessing={processing}
-                                maxPages={numPages}
+                                maxPages={numPages > 0 ? numPages : 100}
                             />
                         )}
 
@@ -150,7 +153,7 @@ export function Workspace() {
                                     {file && (
                                         <>
                                             <p className="text-primary">&gt; [PDF] Archivo cargado: {file.name}</p>
-                                            <p className="text-primary">&gt; [PAGES] Estimado: {numPages} páginas</p>
+                                            {numPages > 0 && <p className="text-primary">&gt; [PAGES] Total: {numPages} páginas</p>}
                                         </>
                                     )}
                                     {extractionRanges.length > 0 && (
@@ -166,7 +169,7 @@ export function Workspace() {
                                     {processed && (
                                         <>
                                             <p className="text-success">&gt; ✓ Procesamiento completado</p>
-                                            <p className="text-success">&gt; ✓ Documento validado</p>
+                                            <p className="text-success">&gt; ✓ {processed.pageCount} páginas procesadas</p>
                                         </>
                                     )}
                                 </div>
@@ -181,6 +184,7 @@ export function Workspace() {
                                 markdown={processed.markdown}
                                 certificateData={processed.certificateData}
                                 anomalies={processed.anomalies}
+                                extractions={processed.extractions}
                                 loading={false}
                             />
                         ) : (
@@ -204,6 +208,7 @@ export function Workspace() {
                         </span></span>
                     </div>
                     <div className="text-muted">
+                        {numPages > 0 && <span>PAGES: <span className="text-primary">{numPages}</span> | </span>}
                         {extractionRanges.length > 0 && <span>RANGES: <span className="text-primary">{extractionRanges.length}</span></span>}
                         {processed && <span>COMPLETE: <span className="text-success">✓</span></span>}
                     </div>
