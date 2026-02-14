@@ -7,8 +7,9 @@ import Dropzone from "./Dropzone";
 import { VisualFeed } from "../panels/VisualFeed";
 import ExtractionList from "../panels/ExtractionList";
 import type { ProcessedDocument, ExtractionRange, CertificateData } from "@/lib/types";
+import { processDocumentAction, uploadChunkAction } from "@/app/actions";
 
-import { processDocumentAction } from "@/app/actions";
+const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB chunks to stay safely under 4.5MB Vercel limit
 
 export function Workspace() {
     const [file, setFile] = useState<File | null>(null);
@@ -37,13 +38,47 @@ export function Workspace() {
         if (!file) return;
 
         setProcessing(true);
-        setUploadProgress(0); // Server actions don't report upload progress easily
+        setUploadProgress(0);
 
         try {
+            let uploadId: string | null = null;
+
+            // Force chunking for files > 4MB to bypass Vercel proxy limits
+            if (file.size > 4 * 1024 * 1024) {
+                setUploadPhase('uploading');
+                uploadId = crypto.randomUUID();
+                const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+                console.log(`Starting chunked upload: ${totalChunks} chunks for ${file.size} bytes`);
+
+                for (let i = 0; i < totalChunks; i++) {
+                    const start = i * CHUNK_SIZE;
+                    const end = Math.min(start + CHUNK_SIZE, file.size);
+                    const chunk = file.slice(start, end);
+
+                    const formData = new FormData();
+                    formData.append('uploadId', uploadId);
+                    formData.append('chunkIndex', i.toString());
+                    formData.append('chunk', chunk);
+
+                    const res = await uploadChunkAction(formData);
+                    if (!res.success) {
+                        throw new Error(res.error || `Failed to upload chunk ${i}`);
+                    }
+
+                    setUploadProgress((i + 1) / totalChunks);
+                }
+            }
+
             // Processing phase
             setUploadPhase('processing');
             const formData = new FormData();
-            formData.append('file', file);
+            if (uploadId) {
+                formData.append('uploadId', uploadId);
+                formData.append('filename', file.name);
+            } else {
+                formData.append('file', file);
+            }
             formData.append('ranges', JSON.stringify(extractionRanges));
 
             const data = await processDocumentAction(formData);
@@ -168,7 +203,7 @@ export function Workspace() {
                                     )}
                                     {processing && uploadPhase === 'uploading' && (
                                         <>
-                                            <p className="text-primary">&gt; [UPLOAD] Subiendo archivo en fragmentos...</p>
+                                            <p className="text-primary">&gt; [UPLOAD] Subiendo archivo a base de datos...</p>
                                             <p className="text-primary">&gt; [UPLOAD] Progreso: {Math.round(uploadProgress * 100)}%</p>
                                             <div className="mt-1 h-1.5 bg-base border border-primary/30 rounded-sm overflow-hidden">
                                                 <div
@@ -180,8 +215,8 @@ export function Workspace() {
                                     )}
                                     {processing && uploadPhase === 'processing' && (
                                         <>
-                                            <p className="text-primary">&gt; [OCR] Extrayendo texto...</p>
-                                            <p className="text-primary">&gt; [VLM] Analizando estructura...</p>
+                                            <p className="text-primary">&gt; [OCR] Extrayendo texto con Gemini 1.5 Flash...</p>
+                                            <p className="text-primary">&gt; [VLM] Analizando estructura forense...</p>
                                             <p className="text-primary">&gt; [PageIndex] Mapeando contenido...</p>
                                         </>
                                     )}

@@ -7,6 +7,7 @@ import { buildPageIndexTree } from '@/lib/pageindex';
 import { getActualPageCount } from '@/lib/pdf-utils';
 import { calculateOptimalChunks } from '@/lib/pdf-splitter';
 import { GEMINI_API_KEY } from '@/lib/env';
+import { saveChunk, assembleFile, cleanupChunks } from '@/lib/db-chunk-store';
 
 // Server Action configuration
 export const maxDuration = 60; // Max allowed for Hobby plan
@@ -19,53 +20,27 @@ interface ExtractionRange {
     name: string;
 }
 
-function estimateRangeSize(
-    totalBase64Length: number,
-    totalPages: number,
-    rangeStart: number,
-    rangeEnd: number
-): number {
-    const bytesPerPage = totalBase64Length / totalPages;
-    const rangePages = rangeEnd - rangeStart + 1;
-    return bytesPerPage * rangePages;
-}
+// ... helper functions omitted for brevity as they are unused/internal logic
+// If needed, they can be restored from previous version or validation lib
 
-function shouldSplitRange(
-    totalBase64Length: number,
-    totalPages: number,
-    rangeStart: number,
-    rangeEnd: number
-): boolean {
-    const GEMINI_LIMIT = 20 * 1024 * 1024; // 20MB
-    const estimatedSize = estimateRangeSize(
-        totalBase64Length,
-        totalPages,
-        rangeStart,
-        rangeEnd
-    );
-    return estimatedSize > GEMINI_LIMIT;
-}
+export async function uploadChunkAction(formData: FormData) {
+    try {
+        const uploadId = formData.get('uploadId') as string;
+        const index = parseInt(formData.get('chunkIndex') as string);
+        const chunk = formData.get('chunk') as File;
 
-function splitRangeIntoChunks(
-    totalBase64Length: number,
-    totalPages: number,
-    rangeStart: number,
-    rangeEnd: number
-): Array<{ start: number; end: number }> {
-    const GEMINI_LIMIT = 20 * 1024 * 1024;
-    const bytesPerPage = totalBase64Length / totalPages;
-    const maxPagesPerChunk = Math.floor(GEMINI_LIMIT / bytesPerPage);
+        if (!uploadId || isNaN(index) || !chunk) {
+            throw new Error('Missing chunk data');
+        }
 
-    const chunks: Array<{ start: number; end: number }> = [];
-    let currentStart = rangeStart;
+        const buffer = Buffer.from(await chunk.arrayBuffer());
+        await saveChunk(uploadId, index, buffer);
 
-    while (currentStart <= rangeEnd) {
-        const currentEnd = Math.min(currentStart + maxPagesPerChunk - 1, rangeEnd);
-        chunks.push({ start: currentStart, end: currentEnd });
-        currentStart = currentEnd + 1;
+        return { success: true };
+    } catch (error: any) {
+        console.error('Upload Chunk Error:', error);
+        return { success: false, error: error.message };
     }
-
-    return chunks;
 }
 
 export async function processDocumentAction(formData: FormData) {
@@ -73,45 +48,59 @@ export async function processDocumentAction(formData: FormData) {
 
     try {
         const rangesStr = formData.get('ranges') as string;
-        const file = formData.get('file') as File;
+        const uploadId = formData.get('uploadId') as string;
 
-        if (!file) {
-            throw new Error('No file provided');
+        let originalBuffer: Buffer;
+        let filename = 'document.pdf';
+        let fileSize = 0;
+
+        if (uploadId) {
+            console.log(`Reassembling file from chunks: ${uploadId}`);
+            originalBuffer = await assembleFile(uploadId);
+            fileSize = originalBuffer.length;
+            filename = (formData.get('filename') as string) || 'document.pdf';
+
+            // Clean up chunks asynchronously to save DB space
+            cleanupChunks(uploadId).catch(err => console.error('Cleanup error:', err));
+        } else {
+            const file = formData.get('file') as File;
+            if (!file) {
+                throw new Error('No file provided');
+            }
+            fileSize = file.size;
+            filename = file.name;
+            const arrayBuffer = await file.arrayBuffer();
+            originalBuffer = Buffer.from(arrayBuffer);
         }
 
-        const fileSize = file.size;
-        const filename = file.name;
-        const arrayBuffer = await file.arrayBuffer();
-
-        const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB (matching next.config.ts)
+        const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
         if (fileSize > MAX_FILE_SIZE) {
             throw new Error(`File too large. Max 50MB, received ${(fileSize / 1024 / 1024).toFixed(2)}MB`);
         }
 
         console.log(`Processing: ${filename} (${(fileSize / 1024 / 1024).toFixed(2)}MB)`);
-
-        // Copy buffer before pdfjs detaches the ArrayBuffer
-        const originalBuffer = Buffer.from(arrayBuffer);
         const base64 = originalBuffer.toString('base64');
 
         // Use gemini-1.5-flash for speed and stability
         const model = genAI.getGenerativeModel({
             model: 'gemini-1.5-flash',
             generationConfig: {
-                maxOutputTokens: 16000, // Reduced from 32000 for speed
+                maxOutputTokens: 16000,
             }
         });
 
         // Obtener número real de páginas via pdfjs-dist
-        const totalPages = await getActualPageCount(arrayBuffer);
+        // Convert Buffer to Uint8Array for pdfjs
+        const uint8Array = new Uint8Array(originalBuffer);
+        const totalPages = await getActualPageCount(uint8Array.buffer);
         console.log(`Total pages detected: ${totalPages}`);
 
         // Segundo: Extraer documento completo (con auto-split si >50 páginas)
+        // Note: Logic simplified here to assume full document processing for this fix
         const chunks = calculateOptimalChunks(totalPages);
         let markdown: string;
 
         if (chunks.length === 1) {
-            // PDF pequeño/mediano: procesamiento normal en una sola llamada
             const response = await model.generateContent([
                 {
                     inlineData: {
@@ -121,7 +110,6 @@ export async function processDocumentAction(formData: FormData) {
                 },
                 {
                     text: `Extrae TODO el texto de este documento en Markdown bien estructurado.
-
 REGLAS DE FORMATO:
 - Usa # para títulos principales, ## para secciones, ### para subsecciones
 - TABLAS: SIEMPRE usa formato Markdown válido con fila separadora. Ejemplo:
@@ -140,12 +128,10 @@ REGLAS DE FORMATO:
 Sé minucioso y preciso. No omitas contenido.`,
                 },
             ]);
-
             markdown = response.response.text();
         } else {
             console.log(`Large PDF detected (${totalPages} pages): splitting into ${chunks.length} chunks`);
             let fullMarkdown = '';
-
             for (const chunk of chunks) {
                 console.log(`Processing chunk pages ${chunk.startPage}-${chunk.endPage}...`);
                 const chunkResponse = await model.generateContent([
@@ -184,20 +170,6 @@ Sé minucioso y preciso. No omitas contenido.`,
         const highCount = validation.anomalies.filter(a => a.severity === 'high').length;
         const mediumCount = validation.anomalies.filter(a => a.severity === 'medium').length;
         const validationScore = Math.max(0, 1.0 - (highCount * 0.3) - (mediumCount * 0.1));
-
-        // Procesar rangos si existen
-        let extractions: any[] = [];
-        if (rangesStr) {
-            try {
-                const ranges: ExtractionRange[] = JSON.parse(rangesStr);
-                // (Simplificado: si hay rangos, procesarlos con la misma lógica que route.ts)
-                // Por brevedad, omito la implementación completa de rangos divididos aquí,
-                // asumiendo que el caso principal es el documento completo.
-                // Si se necesita, copiar tal cual de route.ts
-            } catch (e) {
-                console.error('Error parsing ranges:', e);
-            }
-        }
 
         const endTime = Date.now();
 
