@@ -57,7 +57,7 @@ export function buildPageIndexTree(
     let paragraphCount = 0;
     let maxDepth = 0;
 
-    lines.forEach((line, idx) => {
+    lines.forEach((line) => {
         // Detectar encabezados
         const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
 

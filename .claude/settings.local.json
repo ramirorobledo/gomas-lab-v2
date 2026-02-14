@@ -16,7 +16,9 @@
       "Bash(npx tsx:*)",
       "Bash(taskkill:*)",
       "Bash(git rm:*)",
-      "Bash(npx kill-port:*)"
+      "Bash(npx kill-port:*)",
+      "Bash(netstat:*)",
+      "Bash(npx eslint:*)"
     ]
   }
 }

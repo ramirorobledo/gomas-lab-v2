@@ -11,15 +11,6 @@ import { saveChunk, assembleFile, cleanupChunks } from '@/lib/db-chunk-store';
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-interface ExtractionRange {
-    from: number;
-    to: number;
-    name: string;
-}
-
-// ... helper functions omitted for brevity as they are unused/internal logic
-// If needed, they can be restored from previous version or validation lib
-
 export async function uploadChunkAction(formData: FormData) {
     try {
         const uploadId = formData.get('uploadId') as string;
@@ -34,9 +25,10 @@ export async function uploadChunkAction(formData: FormData) {
         await saveChunk(uploadId, index, buffer);
 
         return { success: true };
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
         console.error('Upload Chunk Error:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: message };
     }
 }
 
@@ -44,7 +36,6 @@ export async function processDocumentAction(formData: FormData) {
     const startTime = Date.now();
 
     try {
-        const rangesStr = formData.get('ranges') as string;
         const uploadId = formData.get('uploadId') as string;
 
         let originalBuffer: Buffer;
@@ -78,9 +69,9 @@ export async function processDocumentAction(formData: FormData) {
         console.log(`Processing: ${filename} (${(fileSize / 1024 / 1024).toFixed(2)}MB)`);
         const base64 = originalBuffer.toString('base64');
 
-        // Use gemini-1.5-flash for speed and stability
+        // Use gemini-2.0-flash for speed and stability
         const model = genAI.getGenerativeModel({
-            model: 'gemini-1.5-flash',
+            model: 'gemini-2.0-flash',
             generationConfig: {
                 maxOutputTokens: 16000,
             }
@@ -155,7 +146,7 @@ Sé minucioso y preciso. No omitas contenido.`,
         const cleanedMarkdown = validation.cleaned_markdown;
 
         // Certificado forense
-        const certificate = generateForensicCertificate(validation, 'gemini-1.5-flash');
+        const certificate = generateForensicCertificate(validation, 'gemini-2.0-flash');
 
         // PageIndex tree
         const pageIndexTree = buildPageIndexTree(cleanedMarkdown, {
@@ -191,12 +182,12 @@ Sé minucioso y preciso. No omitas contenido.`,
             processingTime: endTime - startTime,
         };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Action Error:', error);
+        const message = error instanceof Error ? error.message : 'Error processing document';
         return {
             success: false,
-            error: error.message || 'Error processing document',
-            stack: error.stack
+            error: message,
         };
     }
 }

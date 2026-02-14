@@ -23,6 +23,7 @@ export default function Sidebar({ activeTab, onSwitchTab, certificateData }: Sid
             {/* Mobile Hamburger */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
+                aria-label={isOpen ? "Cerrar menú" : "Abrir menú"}
                 className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-panel border border-primary/30 rounded-sm"
             >
                 <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -38,7 +39,11 @@ export default function Sidebar({ activeTab, onSwitchTab, certificateData }: Sid
             {isOpen && (
                 <div
                     className="lg:hidden fixed inset-0 bg-black/80 z-30"
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Cerrar menú"
                     onClick={() => setIsOpen(false)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setIsOpen(false); }}
                 />
             )}
 

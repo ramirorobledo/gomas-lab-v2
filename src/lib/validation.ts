@@ -85,7 +85,6 @@ function cleanMalformedTables(markdown: string): { cleaned: string; issues: numb
         // Detectar inicio de bloque de tabla (línea con al menos un pipe)
         if (line.includes("|") && line.trim().length > 1) {
             // Recolectar todo el bloque de líneas con pipes consecutivas
-            const blockStart = i;
             const block: string[] = [];
             while (i < lines.length && lines[i].includes("|") && lines[i].trim().length > 1) {
                 block.push(lines[i]);

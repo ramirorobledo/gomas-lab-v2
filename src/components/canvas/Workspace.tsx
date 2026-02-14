@@ -49,8 +49,6 @@ export function Workspace() {
                 uploadId = crypto.randomUUID();
                 const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
-                console.log(`Starting chunked upload: ${totalChunks} chunks for ${file.size} bytes`);
-
                 for (let i = 0; i < totalChunks; i++) {
                     const start = i * CHUNK_SIZE;
                     const end = Math.min(start + CHUNK_SIZE, file.size);
@@ -95,7 +93,7 @@ export function Workspace() {
                     hash_markdown: data.certificate.hash_markdown || "",
                     timestamp: data.certificate.timestamp || "",
                     validation_status: data.certificate.status || "ERROR",
-                    vlm_used: 'gemini-1.5-flash',
+                    vlm_used: 'gemini-2.0-flash',
                     processing_time_ms: data.processingTime || 0,
                     anomalies_count: data.anomalies?.length || 0,
                     integrity_hash: data.certificate.integrity_hash || "",
@@ -104,9 +102,10 @@ export function Workspace() {
                 extractions: data.extractions || [],
                 pageCount: data.pageCount || 0,
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
             console.error("Error processing file:", error);
-            alert(`Error procesando documento: ${error.message}`);
+            alert(`Error procesando documento: ${message}`);
         } finally {
             setProcessing(false);
             setUploadPhase('idle');

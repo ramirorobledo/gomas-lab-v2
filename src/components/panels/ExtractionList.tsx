@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 
 interface ExtractionRange {
     from: number;
@@ -25,13 +25,10 @@ export default function ExtractionList({
     isProcessing,
     maxPages
 }: ExtractionListProps) {
+    const clampedMax = useMemo(() => Math.min(10, maxPages || 10), [maxPages]);
     const [from, setFrom] = useState(1);
-    const [to, setTo] = useState(Math.min(10, maxPages || 10));
+    const [to, setTo] = useState(clampedMax);
     const [name, setName] = useState("extraction_1");
-
-    useEffect(() => {
-        setTo((prev) => Math.min(prev, Math.min(10, maxPages || 10)));
-    }, [maxPages]);
 
     const handleAdd = () => {
         if (from > 0 && to <= maxPages && from <= to) {
@@ -52,38 +49,44 @@ export default function ExtractionList({
             <div className="space-y-3 p-3 bg-black/30 rounded border border-primary/20">
                 <div className="grid grid-cols-2 gap-2">
                     <div>
-                        <label className="text-[10px] text-muted font-data uppercase mb-1 block">
+                        <label htmlFor="extract-from" className="text-[10px] text-muted font-data uppercase mb-1 block">
                             Desde
                         </label>
                         <input
+                            id="extract-from"
                             type="number"
                             min="1"
                             max={maxPages}
                             value={from}
+                            placeholder="Desde página"
                             onChange={(e) => setFrom(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-full bg-base border border-primary/30 text-primary px-2 py-2 rounded-sm font-mono text-xs focus:border-primary focus:outline-none"
+                            className="w-full bg-base border border-primary/30 text-primary px-2 py-2 rounded-sm font-mono text-xs focus:border-primary focus:outline-none placeholder-gray-600"
                         />
                     </div>
                     <div>
-                        <label className="text-[10px] text-muted font-data uppercase mb-1 block">
+                        <label htmlFor="extract-to" className="text-[10px] text-muted font-data uppercase mb-1 block">
                             Hasta
                         </label>
                         <input
+                            id="extract-to"
                             type="number"
                             min="1"
                             max={maxPages}
                             value={to}
+                            placeholder="Hasta página"
                             onChange={(e) => setTo(Math.min(maxPages, parseInt(e.target.value) || maxPages))}
-                            className="w-full bg-base border border-primary/30 text-primary px-2 py-2 rounded-sm font-mono text-xs focus:border-primary focus:outline-none"
+                            className="w-full bg-base border border-primary/30 text-primary px-2 py-2 rounded-sm font-mono text-xs focus:border-primary focus:outline-none placeholder-gray-600"
                         />
                     </div>
                 </div>
 
+                <label htmlFor="extract-name" className="sr-only">Nombre de extracción</label>
                 <input
+                    id="extract-name"
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Nombre del archivo"
+                    placeholder="ej: extraction_1"
                     className="w-full bg-base border border-primary/30 text-primary px-2 py-2 rounded-sm font-tech text-xs uppercase tracking-wider focus:border-primary focus:outline-none placeholder-gray-600"
                 />
 
@@ -117,6 +120,7 @@ export default function ExtractionList({
                             </div>
                             <button
                                 onClick={() => onRemove(idx)}
+                                aria-label={`Eliminar ${range.name}`}
                                 className="ml-2 px-2 py-1 bg-danger/20 hover:bg-danger/40 border border-danger/50 text-danger rounded text-[10px] font-tech transition-all flex-shrink-0"
                             >
                                 ✕

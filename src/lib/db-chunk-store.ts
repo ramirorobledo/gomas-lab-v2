@@ -51,7 +51,7 @@ export async function assembleFile(uploadId: string): Promise<Buffer> {
         }
 
         // Concatenar todos los buffers
-        const buffers = res.rows.map((row: any) => row.data);
+        const buffers = res.rows.map((row: { data: Buffer }) => row.data);
         return Buffer.concat(buffers);
     } finally {
         client.release();
