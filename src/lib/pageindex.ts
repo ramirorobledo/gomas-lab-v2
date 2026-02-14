@@ -23,6 +23,50 @@ interface PageIndexTree {
 }
 
 /**
+ * Detecta y elimina líneas que se repiten en múltiples páginas (headers/footers)
+ */
+function filterRepeatedHeadersFooters(lines: string[]): string[] {
+    const MIN_REPEATS = 3; // mínimo de repeticiones para considerar header/footer
+    const lineFrequency = new Map<string, number>();
+
+    // Contar frecuencia de cada línea no vacía (normalizada)
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        // Ignorar headers markdown (son legítimos)
+        if (trimmed.match(/^#{1,6}\s+/)) continue;
+        // Normalizar: quitar números de página variables
+        const normalized = trimmed
+            .replace(/\d+/g, '#')  // reemplazar números con placeholder
+            .replace(/\s+/g, ' '); // normalizar espacios
+        lineFrequency.set(normalized, (lineFrequency.get(normalized) || 0) + 1);
+    }
+
+    // Identificar patrones repetidos (headers/footers)
+    const repeatedPatterns = new Set<string>();
+    for (const [pattern, count] of lineFrequency) {
+        if (count >= MIN_REPEATS) {
+            repeatedPatterns.add(pattern);
+        }
+    }
+
+    if (repeatedPatterns.size === 0) return lines;
+
+    // Filtrar líneas que matchean patrones repetidos
+    return lines.filter((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return true; // preservar líneas vacías
+        if (trimmed.match(/^#{1,6}\s+/)) return true; // preservar headers markdown
+
+        const normalized = trimmed
+            .replace(/\d+/g, '#')
+            .replace(/\s+/g, ' ');
+
+        return !repeatedPatterns.has(normalized);
+    });
+}
+
+/**
  * Parsea Markdown y construye árbol jerárquico (PageIndex-like)
  */
 export function buildPageIndexTree(
@@ -32,7 +76,8 @@ export function buildPageIndexTree(
         juzgado?: string;
     }
 ): PageIndexTree {
-    const lines = markdown.split("\n");
+    const rawLines = markdown.split("\n");
+    const lines = filterRepeatedHeadersFooters(rawLines);
     const root: TreeNode = {
         id: "root",
         title: "Document",

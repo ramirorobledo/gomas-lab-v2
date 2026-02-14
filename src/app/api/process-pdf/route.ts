@@ -3,6 +3,10 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { randomUUID } from 'crypto';
 import { validateAndCleanMarkdown, generateForensicCertificate } from '@/lib/validation';
 import { buildPageIndexTree } from '@/lib/pageindex';
+import { getUpload, deleteUpload } from '@/lib/chunk-store';
+
+export const maxDuration = 300;
+export const dynamic = 'force-dynamic';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -69,24 +73,48 @@ export async function POST(request: NextRequest) {
         console.log(`Processing for session: ${sessionId}`);
 
         const formData = await request.formData();
-        const file = formData.get('file') as File;
         const rangesStr = formData.get('ranges') as string;
+        const uploadId = formData.get('uploadId') as string | null;
 
-        if (!file) {
-            return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+        let arrayBuffer: ArrayBuffer;
+        let filename: string;
+        let fileSize: number;
+
+        if (uploadId) {
+            // Chunked upload path: retrieve assembled buffer from store
+            const stored = getUpload(uploadId);
+            if (!stored) {
+                return NextResponse.json(
+                    { error: 'Upload not found or expired. Please re-upload.' },
+                    { status: 404 }
+                );
+            }
+            arrayBuffer = new Uint8Array(stored.buffer).buffer as ArrayBuffer;
+            filename = stored.filename;
+            fileSize = stored.totalSize;
+            deleteUpload(uploadId);
+            console.log(`[process-pdf] Using pre-uploaded file: ${filename} (${(fileSize / 1024 / 1024).toFixed(2)}MB)`);
+        } else {
+            // Direct upload path (original behavior)
+            const file = formData.get('file') as File;
+            if (!file) {
+                return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+            }
+            fileSize = file.size;
+            filename = file.name;
+            arrayBuffer = await file.arrayBuffer();
         }
 
         const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-        if (file.size > MAX_FILE_SIZE) {
+        if (fileSize > MAX_FILE_SIZE) {
             return NextResponse.json(
-                { error: `File too large. Max 50MB, received ${(file.size / 1024 / 1024).toFixed(2)}MB` },
+                { error: `File too large. Max 50MB, received ${(fileSize / 1024 / 1024).toFixed(2)}MB` },
                 { status: 413 }
             );
         }
 
-        console.log(`Processing: ${file.name}`);
+        console.log(`Processing: ${filename}`);
 
-        const arrayBuffer = await file.arrayBuffer();
         const base64 = Buffer.from(arrayBuffer).toString('base64');
 
         const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
@@ -100,12 +128,17 @@ export async function POST(request: NextRequest) {
                 },
             },
             {
-                text: '¿Cuántas páginas tiene este PDF? Responde SOLO con un número.',
+                text: `¿Cuántas páginas tiene exactamente este PDF? Responde SOLO con un número entero, sin texto adicional.
+Ejemplo: 38
+No responder con "38 páginas" o "approximately 38", SOLO el número.`,
             },
         ]);
 
         const pageCountStr = countResponse.response.text().trim();
-        const totalPages = parseInt(pageCountStr) || 1;
+        // Extraer solo dígitos de la respuesta
+        const match = pageCountStr.match(/\d+/);
+        const totalPages = match ? parseInt(match[0]) : 1;
+        console.log(`[DEBUG] Raw page count response: "${pageCountStr}" → Parsed: ${totalPages}`);
 
         console.log(`Total pages detected: ${totalPages}`);
 
@@ -229,7 +262,7 @@ export async function POST(request: NextRequest) {
             success: true,
             sessionId,
             conversionId: randomUUID(),
-            filename: file.name,
+            filename,
             markdown: cleanedMarkdown,
             extractions: extractions.map((ext) => ({
                 id: randomUUID(),

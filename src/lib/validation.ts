@@ -93,38 +93,87 @@ function cleanMalformedTables(markdown: string): { cleaned: string; issues: numb
 }
 
 /**
- * Elimina encabezados y números de página repetitivos
+ * Elimina encabezados, números de página y líneas repetitivas (headers/footers)
  */
 function removePageHeaders(markdown: string): { cleaned: string; removed: number } {
-    let cleaned = markdown;
     let removed = 0;
+    const lines = markdown.split("\n");
 
-    const lines = cleaned.split("\n");
+    // FASE 1: Detectar líneas que se repiten frecuentemente (headers/footers de PDF)
+    const MIN_REPEATS = 3;
+    const lineFrequency = new Map<string, number>();
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        if (trimmed.match(/^#{1,6}\s+/)) continue; // no contar headers markdown
+
+        // Normalizar: quitar números variables para detectar patrones
+        const normalized = trimmed
+            .replace(/\d+/g, '#')
+            .replace(/\s+/g, ' ');
+
+        if (normalized.length > 3 && normalized.length < 120) {
+            lineFrequency.set(normalized, (lineFrequency.get(normalized) || 0) + 1);
+        }
+    }
+
+    const repeatedPatterns = new Set<string>();
+    for (const [pattern, count] of lineFrequency) {
+        if (count >= MIN_REPEATS) {
+            repeatedPatterns.add(pattern);
+        }
+    }
+
+    // FASE 2: Filtrar líneas
     const processedLines: string[] = [];
     let lastHeader = "";
 
     lines.forEach((line) => {
-        // Detectar números de página
-        if (line.match(/^\s*(?:Página|Page|Pág\.?)\s+\d+\s*$/i)) {
+        const trimmed = line.trim();
+
+        // Detectar números de página sueltos
+        if (trimmed.match(/^\s*(?:Página|Page|Pág\.?)\s+\d+\s*$/i)) {
             removed++;
-            return; // Skip
+            return;
         }
 
-        // Detectar encabezados repetitivos
-        if (line.match(/^#{1,6}\s+/)) {
+        // Detectar separadores de página tipo "--- página X ---"
+        if (trimmed.match(/^[-—–=_\s]*(?:página|page|pág\.?)\s*\d*\s*[-—–=_\s]*$/i)) {
+            removed++;
+            return;
+        }
+
+        // Detectar números de página sueltos (solo un número)
+        if (trimmed.match(/^\d{1,4}$/) && !trimmed.match(/^#{1,6}/)) {
+            removed++;
+            return;
+        }
+
+        // Detectar encabezados markdown duplicados consecutivos
+        if (trimmed.match(/^#{1,6}\s+/)) {
             if (line === lastHeader) {
                 removed++;
-                return; // Skip duplicate header
+                return;
             }
             lastHeader = line;
+        }
+
+        // Detectar líneas repetidas frecuentemente (headers/footers de PDF)
+        if (trimmed && !trimmed.match(/^#{1,6}\s+/)) {
+            const normalized = trimmed
+                .replace(/\d+/g, '#')
+                .replace(/\s+/g, ' ');
+            if (repeatedPatterns.has(normalized)) {
+                removed++;
+                return;
+            }
         }
 
         processedLines.push(line);
     });
 
-    cleaned = processedLines.join("\n");
-
-    return { cleaned, removed };
+    return { cleaned: processedLines.join("\n"), removed };
 }
 
 /**

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 interface EditorProps {
     markdown: string;
@@ -10,6 +10,11 @@ interface EditorProps {
 
 export function Editor({ markdown, onChange, readOnly = false }: EditorProps) {
     const [content, setContent] = useState(markdown);
+
+    // Sync internal state when markdown prop changes (e.g. new PDF processed)
+    useEffect(() => {
+        setContent(markdown);
+    }, [markdown]);
 
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const newContent = e.target.value;
