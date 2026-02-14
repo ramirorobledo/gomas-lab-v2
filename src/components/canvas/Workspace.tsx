@@ -1,17 +1,18 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import Sidebar from "../hud/Sidebar";
 import SystemHeader from "../hud/SystemHeader";
 import Dropzone from "./Dropzone";
 import { VisualFeed } from "../panels/VisualFeed";
 import ExtractionList from "../panels/ExtractionList";
-import type { ProcessedDocument, ExtractionRange, CertificateData } from "@/lib/types";
+import type { ProcessedDocument, ExtractionRange } from "@/lib/types";
 import { startProcessingAction, uploadChunkAction, checkJobStatusAction } from "@/app/actions";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, Terminal, CheckCircle2, AlertTriangle, FileText, Cpu, Activity } from "lucide-react";
+import { Loader2, Terminal, Cpu, FileText } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { HudPanel, HudButton, StatusBadge } from "../ui/HudComponents";
 
 // Utility for safe tailwind merge
 function cn(...inputs: ClassValue[]) {
@@ -169,36 +170,34 @@ export function Workspace() {
     };
 
     return (
-        <div className="workspace h-screen w-screen bg-base flex overflow-hidden font-sans text-white/90">
-            {/* SIDEBAR */}
+        <div className="workspace h-screen w-screen bg-base flex overflow-hidden font-sans text-white/90 selection:bg-primary/30">
             <Sidebar
                 activeTab={activeTab}
                 onSwitchTab={setActiveTab}
                 certificateData={processed?.certificateData}
             />
 
-            {/* MAIN CONTENT */}
             <div className="flex-1 flex flex-col overflow-hidden relative">
                 {/* Background Grid */}
-                <div className="absolute inset-0 pointer-events-none opacity-5"
-                    style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }}
+                <div className="absolute inset-0 pointer-events-none opacity-[0.03]"
+                    style={{ backgroundImage: 'var(--image-grid-pattern)', backgroundSize: '40px 40px' }}
                 />
 
                 <SystemHeader />
 
                 <div className="workspace-content flex-1 flex gap-6 p-6 overflow-hidden z-10">
 
-                    {/* LEFT PANEL: Controls */}
+                    {/* LEFT PANEL: INPUT & CONTROLS */}
                     <motion.div
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        className="w-2/5 flex flex-col gap-4 overflow-hidden"
+                        className="w-[480px] flex flex-col gap-4 overflow-hidden"
                     >
                         {/* Dropzone with Status */}
-                        <div className="flex-1 relative group">
+                        <div className="flex-1 relative group min-h-[150px]">
                             <div className={cn(
                                 "absolute inset-0 bg-primary/5 rounded-lg border border-primary/20 transition-all duration-500",
-                                processing && "animate-pulse border-primary/50"
+                                processing && "animate-pulse border-primary/50 shadow-[0_0_30px_rgba(0,243,255,0.1)]"
                             )} />
 
                             <Dropzone
@@ -215,7 +214,7 @@ export function Workspace() {
                             <motion.div
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="flex flex-col gap-2"
+                                className="flex flex-col gap-4"
                             >
                                 <ExtractionList
                                     ranges={extractionRanges}
@@ -224,41 +223,38 @@ export function Workspace() {
                                     onProcess={handleProcess}
                                     isProcessing={processing}
                                     maxPages={numPages > 0 ? numPages : 100}
+                                /* Fixed height for consistent layout */
+                                /* className="h-[250px]" */
                                 />
 
                                 {extractionRanges.length === 0 && (
-                                    <button
+                                    <HudButton
                                         onClick={handleProcess}
                                         disabled={processing}
-                                        className="w-full px-6 py-4 bg-primary/20 hover:bg-primary/30 disabled:opacity-50 disabled:cursor-not-allowed
-                                              border border-primary/50 text-primary font-tech uppercase tracking-widest text-sm
-                                              shadow-[0_0_20px_rgba(99,102,241,0.15)] hover:shadow-[0_0_30px_rgba(99,102,241,0.3)]
-                                              transition-all duration-300 rounded relative overflow-hidden group"
+                                        isLoading={false}
+                                        variant="primary"
+                                        className="w-full py-4 text-sm font-bold tracking-widest"
                                     >
-                                        <span className="relative z-10 flex items-center justify-center gap-2">
-                                            {processing ? (
-                                                <>
-                                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                                    {currentStep || "INITIALIZING..."}
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Cpu className="w-4 h-4" />
-                                                    PROCESS FULL DOCUMENT
-                                                </>
-                                            )}
-                                        </span>
-                                        <div className="absolute inset-0 bg-primary/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-                                    </button>
+                                        {processing ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                {currentStep || "INITIALIZING..."}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Cpu className="w-4 h-4" />
+                                                INITIATE SEQUENCE
+                                            </>
+                                        )}
+                                    </HudButton>
                                 )}
                             </motion.div>
                         )}
 
                         {/* Reset Button */}
                         {processed && (
-                            <motion.button
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
+                            <HudButton
+                                variant="ghost"
                                 onClick={() => {
                                     setFile(null);
                                     setProcessed(null);
@@ -266,45 +262,40 @@ export function Workspace() {
                                     setSystemLogs([]);
                                     setUploadProgress(0);
                                 }}
-                                className="w-full px-4 py-3 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 font-mono text-xs border border-zinc-800 rounded transition-all"
+                                className="w-full text-xs border border-white/5"
                             >
                                 [ SYSTEM RESET ]
-                            </motion.button>
+                            </HudButton>
                         )}
 
-                        {/* TERMINAL LOGS */}
-                        <div className="h-48 glass-panel rounded border border-primary/20 flex flex-col overflow-hidden relative">
-                            <div className="px-3 py-2 border-b border-primary/10 bg-black/40 flex items-center justify-between">
-                                <span className="font-tech text-[10px] text-primary/70 flex items-center gap-2">
-                                    <Terminal className="w-3 h-3" />
-                                    SYSTEM_LOGS
-                                </span>
-                                <div className="flex gap-1">
-                                    <div className="w-2 h-2 rounded-full bg-red-500/50" />
-                                    <div className="w-2 h-2 rounded-full bg-yellow-500/50" />
-                                    <div className="w-2 h-2 rounded-full bg-green-500/50" />
-                                </div>
-                            </div>
-                            <div className="flex-1 p-3 font-mono text-[10px] text-primary/80 overflow-y-auto space-y-1 scrollbar-hide">
-                                {systemLogs.length === 0 && <span className="opacity-50">... awaiting input ...</span>}
+                        {/* TERMINAL LOGS - TALLER */}
+                        <HudPanel className="h-64 flex flex-col" title="SYSTEM_LOGS">
+                            <div className="flex-1 p-3 font-mono text-[10px] text-primary/70 overflow-y-auto space-y-1 scrollbar-hide">
+                                {systemLogs.length === 0 && <span className="opacity-30">... awaiting input ...</span>}
                                 {systemLogs.map((log, i) => (
-                                    <div key={i} className="border-l-2 border-primary/20 pl-2">
+                                    <div key={i} className="border-l border-primary/20 pl-2">
+                                        <span className="text-primary/40 mr-2">{i.toString().padStart(3, '0')}</span>
                                         {log}
                                     </div>
                                 ))}
                                 <div ref={(el) => el?.scrollIntoView({ behavior: 'smooth' })} />
                             </div>
-                        </div>
+                        </HudPanel>
 
                     </motion.div>
 
-                    {/* RIGHT PANEL: VISUAL FEED */}
-                    <div className="flex-1 relative overflow-hidden rounded-lg border border-white/5 bg-black/20 backdrop-blur-sm">
+
+                    {/* RIGHT PANEL: VISUAL FEED (HUD) */}
+                    <HudPanel className="flex-1 overflow-hidden" title="VISUAL_FEED">
+                        <div className="absolute top-4 right-4 z-20">
+                            <StatusBadge status={processing ? 'processing' : (processed ? 'completed' : 'idle')} />
+                        </div>
+
                         <AnimatePresence mode="wait">
                             {processed ? (
                                 <motion.div
                                     key="feed"
-                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    initial={{ opacity: 0, scale: 0.98 }}
                                     animate={{ opacity: 1, scale: 1 }}
                                     exit={{ opacity: 0 }}
                                     className="h-full"
@@ -323,21 +314,28 @@ export function Workspace() {
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
                                     exit={{ opacity: 0 }}
-                                    className="h-full flex items-center justify-center flex-col gap-4"
+                                    className="h-full flex items-center justify-center flex-col gap-6"
                                 >
-                                    <div className="w-24 h-24 rounded-full border border-dashed border-primary/20 flex items-center justify-center animate-spin-slow">
-                                        <div className="w-16 h-16 rounded-full bg-primary/5 flex items-center justify-center animate-reverse-spin">
-                                            <FileText className="w-8 h-8 text-primary/50" />
+                                    {/* Animated HUD spinner */}
+                                    <div className="relative w-64 h-64 flex items-center justify-center">
+                                        <div className="absolute inset-0 border border-primary/10 rounded-full animate-spin-slow opacity-30" />
+                                        <div className="absolute inset-4 border border-dashed border-primary/20 rounded-full animate-reverse-spin opacity-40" />
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <div className="w-32 h-32 bg-primary/5 rounded-full blur-xl animate-pulse" />
                                         </div>
+                                        <FileText className="w-12 h-12 text-primary/50 relative z-10" />
                                     </div>
-                                    <div className="text-center space-y-2">
-                                        <h3 className="text-lg font-tech text-primary/80 tracking-widest">AWAITING_DATA_STREAM</h3>
-                                        <p className="text-xs text-muted font-mono">Secure Connection Established</p>
+
+                                    <div className="text-center space-y-2 relative z-10">
+                                        <h3 className="text-xl font-tech text-primary/90 tracking-[0.2em] glow-text">AWAITING DATA STREAM</h3>
+                                        <p className="text-xs text-muted font-mono uppercase tracking-widest">
+                                            Secure Connection Established :: Ready for Input
+                                        </p>
                                     </div>
                                 </motion.div>
                             )}
                         </AnimatePresence>
-                    </div>
+                    </HudPanel>
 
                 </div>
             </div>

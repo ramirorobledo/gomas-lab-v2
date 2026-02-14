@@ -2,6 +2,15 @@
 
 import { useState } from "react";
 import type { CertificateData } from "@/lib/types";
+import { FileText, Cpu, Activity, ShieldCheck, AlertTriangle } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { HudPanel } from "../ui/HudComponents";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+function cn(...inputs: ClassValue[]) {
+    return twMerge(clsx(inputs));
+}
 
 interface SidebarProps {
     activeTab: string;
@@ -10,177 +19,83 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeTab, onSwitchTab, certificateData }: SidebarProps) {
-    const [isOpen, setIsOpen] = useState(false);
+    const [hoveredTab, setHoveredTab] = useState<string | null>(null);
 
     const tabs = [
-        { id: "certificate", label: "Certificado", icon: "📜" },
-        { id: "console", label: "Console", icon: "⚙️" },
-        { id: "status", label: "Status", icon: "📊" },
+        { id: "certificate", label: "CERTIFICATE", icon: FileText },
+        { id: "console", label: "SYSTEM_CONSOLE", icon: Cpu },
+        { id: "status", label: "NET_STATUS", icon: Activity },
     ];
 
     return (
-        <>
-            {/* Mobile Hamburger */}
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                aria-label={isOpen ? "Cerrar menú" : "Abrir menú"}
-                className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-panel border border-primary/30 rounded-sm"
-            >
-                <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    {isOpen ? (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    ) : (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                    )}
-                </svg>
-            </button>
+        <aside className="w-16 h-full bg-black/80 border-r border-white/5 flex flex-col items-center py-4 z-50 backdrop-blur-md relative">
+            {/* Brand Mark */}
+            <div className="mb-8 w-10 h-10 flex items-center justify-center bg-primary/10 rounded-sm border border-primary/30 text-primary font-black font-tech text-xs tracking-tighter">
+                GL
+            </div>
 
-            {/* Overlay */}
-            {isOpen && (
-                <div
-                    className="lg:hidden fixed inset-0 bg-black/80 z-30"
-                    role="button"
-                    tabIndex={0}
-                    aria-label="Cerrar menú"
-                    onClick={() => setIsOpen(false)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setIsOpen(false); }}
-                />
-            )}
+            {/* Navigation Strip */}
+            <nav className="flex-1 flex flex-col gap-4 w-full px-2">
+                {tabs.map((tab) => {
+                    const isActive = activeTab === tab.id;
+                    const Icon = tab.icon;
 
-            {/* Sidebar */}
-            <aside className={`
-                fixed lg:relative
-                w-80 h-full
-                bg-base border-r border-border
-                flex flex-col
-                z-40
-                transform transition-transform duration-300
-                ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-            `}>
-                {/* Header */}
-                <div className="p-6 border-b border-border bg-panel/30">
-                    <h1 className="font-tech font-black text-xl tracking-widest text-primary glow-text uppercase">
-                        GOMAS<span className="text-white">LAB</span>
-                    </h1>
-                    <div className="flex items-center gap-2 mt-2">
-                        <div className="h-1 w-1 bg-success rounded-full animate-pulse"></div>
-                        <p className="text-[10px] font-data text-primary tracking-widest uppercase">
-                            Forensic Edition
-                        </p>
-                    </div>
-                </div>
+                    return (
+                        <div key={tab.id} className="relative group flex justify-center">
+                            <button
+                                onClick={() => onSwitchTab(tab.id)}
+                                onMouseEnter={() => setHoveredTab(tab.id)}
+                                onMouseLeave={() => setHoveredTab(null)}
+                                className={cn(
+                                    "p-3 rounded-md transition-all duration-300 relative overflow-hidden",
+                                    isActive
+                                        ? "text-primary bg-primary/10 shadow-[0_0_15px_rgba(0,243,255,0.2)] border border-primary/30"
+                                        : "text-muted hover:text-white hover:bg-white/5 border border-transparent"
+                                )}
+                            >
+                                <Icon className="w-5 h-5" />
+                                {isActive && (
+                                    <div className="absolute inset-0 bg-primary/5 animate-pulse" />
+                                )}
+                            </button>
 
-                {/* Tabs */}
-                <nav className="flex-1 px-4 space-y-2 mt-4 overflow-auto">
-                    {tabs.map((tab) => (
-                        <button
-                            key={tab.id}
-                            onClick={() => {
-                                onSwitchTab(tab.id);
-                                setIsOpen(false);
-                            }}
-                            className={`
-                                w-full group flex items-center gap-4 px-4 py-4 rounded-sm border transition-all
-                                ${activeTab === tab.id
-                                    ? "bg-primary/10 border-primary/50 text-primary"
-                                    : "bg-transparent border-transparent text-muted hover:border-primary/30 hover:bg-primary/5"
-                                }
-                            `}
-                        >
-                            <span className="text-lg">{tab.icon}</span>
-                            <div className="flex-1 text-left">
-                                <div className="text-sm font-tech uppercase tracking-wider">{tab.label}</div>
-                            </div>
-                            <div className={`w-1 h-1 rounded-full transition-all ${activeTab === tab.id ? "bg-primary shadow-[0_0_8px_rgba(99,102,241,0.8)]" : "bg-gray-700"
-                                }`}></div>
-                        </button>
-                    ))}
-                </nav>
-
-                {/* Content Panels */}
-                <div className="flex-1 overflow-auto p-4 border-t border-border">
-                    {/* Certificate Tab */}
-                    {activeTab === "certificate" && (
-                        <div className="glass-panel p-4 rounded-sm border border-primary/30">
-                            <h3 className="font-tech text-primary uppercase text-xs tracking-widest mb-4">Validación Forense</h3>
-                            {certificateData ? (
-                                <div className="space-y-3 text-[11px]">
-                                    <div className="border-l-2 border-primary pl-3">
-                                        <p className="text-muted font-mono">Status</p>
-                                        <p className={`font-tech ${certificateData.validation_status === 'OK' ? 'text-success' :
-                                                certificateData.validation_status === 'ALERT' ? 'text-alert' : 'text-danger'
-                                            }`}>{certificateData.validation_status === 'OK' ? '✓' : '⚠'} {certificateData.validation_status}</p>
-                                    </div>
-                                    <div className="border-l-2 border-primary pl-3">
-                                        <p className="text-muted font-mono">Anomalías</p>
-                                        <p className="text-primary font-data">{certificateData.anomalies_count}</p>
-                                    </div>
-                                    <div className="border-l-2 border-primary pl-3">
-                                        <p className="text-muted font-mono">Hash SHA256</p>
-                                        <p className="text-gray-400 font-mono truncate text-[10px]">{certificateData.hash_original?.slice(0, 16)}...</p>
-                                    </div>
-                                    {certificateData.processing_time_ms > 0 && (
-                                        <div className="border-l-2 border-primary pl-3">
-                                            <p className="text-muted font-mono">Tiempo</p>
-                                            <p className="text-primary font-data">{(certificateData.processing_time_ms / 1000).toFixed(1)}s</p>
+                            {/* Tooltip */}
+                            <AnimatePresence>
+                                {hoveredTab === tab.id && (
+                                    <motion.div
+                                        initial={{ opacity: 0, x: 10 }}
+                                        animate={{ opacity: 1, x: 20 }}
+                                        exit={{ opacity: 0, x: 10 }}
+                                        className="absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 whitespace-nowrap pointer-events-none"
+                                    >
+                                        <div className="bg-black/90 border border-primary/30 px-3 py-1.5 rounded-sm text-[10px] font-tech text-primary tracking-widest uppercase shadow-xl backdrop-blur-sm">
+                                            {tab.label}
+                                            {/* Decorative line */}
+                                            <div className="absolute left-0 top-1/2 -translate-x-full w-2 h-[1px] bg-primary/50" />
                                         </div>
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="text-center text-muted text-xs font-data">
-                                    Procesa un documento para ver el certificado
-                                </div>
-                            )}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </div>
-                    )}
+                    );
+                })}
+            </nav>
 
-                    {/* Console Tab */}
-                    {activeTab === "console" && (
-                        <div className="glass-panel p-4 rounded-sm border border-primary/30 font-mono text-[10px]">
-                            <h3 className="font-tech text-primary uppercase text-xs tracking-widest mb-4">System Console</h3>
-                            <div className="bg-black/50 p-3 rounded h-64 overflow-auto border border-primary/20">
-                                <p className="text-muted">&gt; Sistema listo</p>
-                                <p className="text-muted">&gt; Esperando documento...</p>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Status Tab */}
-                    {activeTab === "status" && (
-                        <div className="glass-panel p-4 rounded-sm border border-primary/30 space-y-4">
-                            <h3 className="font-tech text-primary uppercase text-xs tracking-widest">Status del Sistema</h3>
-                            <div className="space-y-2 text-[10px]">
-                                <div className="flex justify-between">
-                                    <span className="text-muted">Procesados</span>
-                                    <span className="text-primary font-data">0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted">Tiempo</span>
-                                    <span className="text-primary font-data">0ms</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted">Conectado</span>
-                                    <span className="text-success font-data">ONLINE</span>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* Footer */}
-                <div className="p-4 border-t border-border bg-panel/30">
-                    <div className="flex justify-between items-end mb-2">
-                        <span className="text-[10px] text-muted font-tech">SYSTEM</span>
-                        <span className="text-[10px] text-success font-data animate-pulse">ONLINE</span>
+            {/* Status Indicator */}
+            <div className="mt-auto flex flex-col gap-2 items-center w-full px-2">
+                {certificateData && (
+                    <div className={cn(
+                        "w-8 h-8 rounded-full flex items-center justify-center border transition-colors",
+                        certificateData.validation_status === 'OK' ? "border-success/50 bg-success/10 text-success" : "border-danger/50 bg-danger/10 text-danger"
+                    )}>
+                        {certificateData.validation_status === 'OK' ? <ShieldCheck className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
                     </div>
-                    <div className="flex gap-1 h-1">
-                        <div className="flex-1 bg-primary/40"></div>
-                        <div className="flex-1 bg-primary/30"></div>
-                        <div className="flex-1 bg-primary/20"></div>
-                        <div className="w-8 bg-success/50"></div>
-                    </div>
-                </div>
-            </aside>
-        </>
+                )}
+
+                <div className="h-10 w-[1px] bg-white/10 my-2" />
+
+                <div className="w-2 h-2 rounded-full bg-success animate-pulse shadow-[0_0_10px_rgba(0,255,157,0.5)]" title="System Online" />
+            </div>
+        </aside>
     );
 }

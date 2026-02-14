@@ -67,6 +67,28 @@ function extractLegalElements(markdown: string) {
 }
 
 /**
+ * Elimina preámbulo conversacional de Gemini y code fences envolventes.
+ * Ej: "¡Por supuesto! Aquí está..." + ```markdown ... ```
+ */
+function stripGeminiPreamble(markdown: string): string {
+    let cleaned = markdown;
+
+    // Remover líneas de preámbulo conversacional al inicio
+    cleaned = cleaned.replace(
+        /^(?:¡?(?:Por supuesto|Claro|Aquí|Sure|Here)[^]*?\n)+/i,
+        ''
+    );
+
+    // Remover code fence de apertura (```markdown o ```)
+    cleaned = cleaned.replace(/^```(?:markdown)?\s*\n/i, '');
+
+    // Remover code fence de cierre al final
+    cleaned = cleaned.replace(/\n?```\s*$/, '');
+
+    return cleaned.trim();
+}
+
+/**
  * Limpia tablas mal formateadas (procesamiento por bloques)
  *
  * Detecta bloques de tabla (líneas consecutivas con pipes) y valida su estructura.
@@ -336,6 +358,9 @@ export function validateAndCleanMarkdown(
 ): ValidationResult {
     const anomalies: ValidationResult["anomalies"] = [];
     let cleaned = markdown;
+
+    // 0. Limpiar preámbulo conversacional de Gemini
+    cleaned = stripGeminiPreamble(cleaned);
 
     // 1. Limpiar tablas rotas
     const { cleaned: cleanedTables, issues: tableIssues } = cleanMalformedTables(cleaned);

@@ -1,27 +1,33 @@
 @import "tailwindcss";
 
 @theme {
-  --color-base: #0a0a0a;
-  --color-panel: #121212;
-  --color-surface: #141414;
-  --color-border: #262626;
-  --color-primary: #6366f1;
-  --color-success: #10b981;
-  --color-process: #06b6d4;
-  --color-alert: #f59e0b;
-  --color-danger: #ef4444;
+  --color-base: #050505;
+  --color-panel: #0a0a0a;
+  --color-surface: #121212;
+  --color-border: #1f1f1f;
+  
+  --color-primary: #00f3ff;
+  --color-primary-dim: #00f3ff20;
+  --color-secondary: #2d62ff;
+  
+  --color-success: #00ff9d;
+  --color-process: #00f3ff;
+  --color-alert: #ffb800;
+  --color-danger: #ff2d55;
 
   /* Mappings for text colors */
-  --color-muted: #a3a3a3;
-  --color-txt-main: #fafafa;
-  --color-txt-muted: #a3a3a3;
-  --color-txt-dim: #525252;
+  --color-muted: #525252;
+  --color-txt-main: #ffffff;
+  --color-txt-muted: #737373;
+  --color-txt-dim: #404040;
 
   --font-sans: var(--font-inter), sans-serif;
   --font-tech: var(--font-orbitron), sans-serif;
   --font-data: var(--font-rajdhani), monospace;
 
-  --image-grid-pattern: linear-gradient(to right, #262626 1px, transparent 1px), linear-gradient(to bottom, #262626 1px, transparent 1px);
+  --image-grid-pattern: linear-gradient(to right, #1a1a1a 1px, transparent 1px), linear-gradient(to bottom, #1a1a1a 1px, transparent 1px);
+  
+  --animate-scan: scan 4s linear infinite;
 }
 
 /* Custom CSS from Mockup */

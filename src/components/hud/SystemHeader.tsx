@@ -4,7 +4,7 @@ export default function SystemHeader() {
             <div className="flex items-center gap-4">
                 <div className="w-px h-4 bg-primary/50"></div>
                 <h2 className="font-tech text-lg text-primary glow-text tracking-wider uppercase">
-                    🔬 OCR FORENSE
+                    ⚡ FORENSIC DATA CORE
                 </h2>
             </div>
             <div className="flex items-center gap-6">

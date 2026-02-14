@@ -1,6 +1,14 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { X, Plus, Trash2 } from "lucide-react";
+import { HudButton, HudInput } from "../ui/HudComponents";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+function cn(...inputs: ClassValue[]) {
+    return twMerge(clsx(inputs));
+}
 
 interface ExtractionRange {
     from: number;
@@ -21,7 +29,6 @@ export default function ExtractionList({
     ranges,
     onAdd,
     onRemove,
-    onProcess,
     isProcessing,
     maxPages
 }: ExtractionListProps) {
@@ -40,105 +47,89 @@ export default function ExtractionList({
     };
 
     return (
-        <div className="glass-panel p-4 rounded-sm border border-primary/30 flex flex-col gap-4 h-full overflow-hidden">
-            <h3 className="font-tech text-primary uppercase text-xs tracking-widest">
-                ✂️ Gestor de Extracciones
+        <div className="flex flex-col gap-4 h-full">
+            <h3 className="font-tech text-primary/70 uppercase text-xs tracking-widest flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-primary/20 border border-primary/50" />
+                TARGET_EXTRACTION_ZONES
             </h3>
 
-            {/* Input Section */}
-            <div className="space-y-3 p-3 bg-black/30 rounded border border-primary/20">
-                <div className="grid grid-cols-2 gap-2">
-                    <div>
-                        <label htmlFor="extract-from" className="text-[10px] text-muted font-data uppercase mb-1 block">
-                            Desde
-                        </label>
-                        <input
-                            id="extract-from"
-                            type="number"
-                            min="1"
-                            max={maxPages}
-                            value={from}
-                            placeholder="Desde página"
-                            onChange={(e) => setFrom(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-full bg-base border border-primary/30 text-primary px-2 py-2 rounded-sm font-mono text-xs focus:border-primary focus:outline-none placeholder-gray-600"
-                        />
-                    </div>
-                    <div>
-                        <label htmlFor="extract-to" className="text-[10px] text-muted font-data uppercase mb-1 block">
-                            Hasta
-                        </label>
-                        <input
-                            id="extract-to"
-                            type="number"
-                            min="1"
-                            max={maxPages}
-                            value={to}
-                            placeholder="Hasta página"
-                            onChange={(e) => setTo(Math.min(maxPages, parseInt(e.target.value) || maxPages))}
-                            className="w-full bg-base border border-primary/30 text-primary px-2 py-2 rounded-sm font-mono text-xs focus:border-primary focus:outline-none placeholder-gray-600"
-                        />
-                    </div>
+            {/* Input Row - Compact Command Line Style */}
+            <div className="p-3 bg-white/5 border border-white/10 flex items-center gap-2 rounded-sm backdrop-blur-md">
+                <div className="flex items-center gap-2 flex-1">
+                    <span className="text-[10px] font-mono text-muted uppercase">RNG:</span>
+                    <HudInput
+                        type="number"
+                        min="1"
+                        max={maxPages}
+                        value={from}
+                        onChange={(e) => setFrom(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-12 text-center"
+                        placeholder="#"
+                    />
+                    <span className="text-muted text-xs">-</span>
+                    <HudInput
+                        type="number"
+                        min="1"
+                        max={maxPages}
+                        value={to}
+                        onChange={(e) => setTo(Math.min(maxPages, parseInt(e.target.value) || maxPages))}
+                        className="w-12 text-center"
+                        placeholder="#"
+                    />
+                    <span className="text-muted text-xs mx-1">|</span>
+                    <span className="text-[10px] font-mono text-muted uppercase">ID:</span>
+                    <HudInput
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="NAME"
+                        className="flex-1 min-w-[80px]"
+                    />
                 </div>
-
-                <label htmlFor="extract-name" className="sr-only">Nombre de extracción</label>
-                <input
-                    id="extract-name"
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="ej: extraction_1"
-                    className="w-full bg-base border border-primary/30 text-primary px-2 py-2 rounded-sm font-tech text-xs uppercase tracking-wider focus:border-primary focus:outline-none placeholder-gray-600"
-                />
-
-                <button
+                <HudButton
                     onClick={handleAdd}
-                    className="w-full px-3 py-2 bg-primary/20 hover:bg-primary/40 border border-primary/50 text-primary rounded-sm text-xs font-tech uppercase tracking-wider transition-all"
+                    disabled={isProcessing}
+                    className="p-2 h-full aspect-square flex items-center justify-center border-primary/30 text-primary bg-primary/10"
                 >
-                    + Agregar Rango ({to - from + 1} págs)
-                </button>
+                    <Plus className="w-4 h-4" />
+                </HudButton>
             </div>
 
-            {/* List Section */}
-            <div className="flex-1 overflow-auto space-y-2">
+            {/* Tactical List */}
+            <div className="flex-1 overflow-auto space-y-1 pr-1 font-mono text-xs">
                 {ranges.length === 0 ? (
-                    <div className="text-center text-muted text-xs font-data py-4">
-                        Ingresa rangos para extraer
+                    <div className="text-center text-muted/30 py-8 border border-dashed border-white/10 rounded-sm italic">
+                        NO_TARGETS_ACQUIRED
                     </div>
                 ) : (
                     ranges.map((range, idx) => (
                         <div
                             key={idx}
-                            className="bg-black/30 p-2 rounded border border-primary/20 flex justify-between items-center"
+                            className="bg-black/40 hover:bg-white/5 p-2 rounded-sm border-l-2 border-primary/20 hover:border-primary flex justify-between items-center group transition-all"
                         >
-                            <div className="flex-1 min-w-0">
-                                <p className="text-primary font-tech text-xs uppercase truncate">
-                                    {range.name}
-                                </p>
-                                <p className="text-[10px] text-muted">
-                                    Pág {range.from}-{range.to} ({range.to - range.from + 1})
-                                </p>
+                            <div className="flex items-center gap-3">
+                                <span className="text-primary/50 text-[10px] w-4">{(idx + 1).toString().padStart(2, '0')}</span>
+                                <span className="text-white/90 uppercase tracking-wider font-bold text-[10px]">{range.name}</span>
+                                <span className="text-muted text-[10px] bg-white/5 px-1.5 rounded">P.{range.from}-{range.to}</span>
                             </div>
+
                             <button
                                 onClick={() => onRemove(idx)}
-                                aria-label={`Eliminar ${range.name}`}
-                                className="ml-2 px-2 py-1 bg-danger/20 hover:bg-danger/40 border border-danger/50 text-danger rounded text-[10px] font-tech transition-all flex-shrink-0"
+                                aria-label={`Remove extraction range ${range.name}`}
+                                className="text-danger/40 hover:text-danger hover:bg-danger/10 p-1.5 rounded transition-colors opacity-0 group-hover:opacity-100"
                             >
-                                ✕
+                                <X className="w-3 h-3" />
                             </button>
                         </div>
                     ))
                 )}
             </div>
 
-            {/* Process Button */}
+            {/* Context Stats */}
             {ranges.length > 0 && (
-                <button
-                    onClick={onProcess}
-                    disabled={isProcessing}
-                    className="w-full px-4 py-3 bg-success/20 hover:bg-success/40 disabled:bg-gray-700 border border-success/50 text-success font-tech rounded-sm text-xs uppercase tracking-wider transition-all shadow-[0_0_10px_rgba(16,185,129,0.1)] disabled:shadow-none"
-                >
-                    {isProcessing ? "⏳ Procesando..." : `▶️ Procesar ${ranges.length} Extracciones`}
-                </button>
+                <div className="text-[10px] text-primary/40 font-mono text-right border-t border-white/5 pt-2">
+                    TOTAL_TARGETS: {ranges.length.toString().padStart(2, '0')} // PAGES: {ranges.reduce((acc, r) => acc + (r.to - r.from + 1), 0)}
+                </div>
             )}
         </div>
     );

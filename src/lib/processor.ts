@@ -54,7 +54,7 @@ export async function processJobInternal(jobId: string, uploadId: string | null,
         // 3. Gemini Processing
         const model = genAI.getGenerativeModel({
             model: 'gemini-2.0-flash',
-            generationConfig: { maxOutputTokens: 32000 }
+            generationConfig: { maxOutputTokens: 60000 }
         }, { timeout: 120_000 });
 
         const GEMINI_PROMPT = `Extrae TODO el texto de este documento en Markdown bien estructurado.
@@ -149,7 +149,10 @@ REGLAS DE FORMATO:
                 hash_markdown: certificate.hash_markdown,
                 integrity_hash: certificate.integrity_hash,
                 timestamp: certificate.timestamp,
-                status: certificate.validation_status,
+                validation_status: certificate.validation_status,
+                vlm_used: 'gemini-2.0-flash',
+                anomalies_count: validation.anomalies.length,
+                processing_time_ms: Date.now() - startTime,
             },
             anomalies: validation.anomalies,
             validationStatus: validation.validation_status,

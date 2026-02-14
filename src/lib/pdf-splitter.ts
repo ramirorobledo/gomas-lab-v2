@@ -5,7 +5,7 @@ export interface PDFChunk {
 }
 
 export function calculateOptimalChunks(totalPages: number): PDFChunk[] {
-  if (totalPages <= 50) {
+  if (totalPages <= 30) {
     return [{ startPage: 1, endPage: totalPages, pageCount: totalPages }];
   }
 

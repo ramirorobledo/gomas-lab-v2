@@ -1,14 +1,36 @@
-import { getDb } from './src/lib/db';
-import { initJobsTable } from './src/lib/job-store';
-import { validateAndCleanMarkdown } from './src/lib/validation';
-import * as dotenv from 'dotenv';
+
+import { Pool } from 'pg';
 import fs from 'fs';
+import path from 'path';
 
-// Load env vars
-dotenv.config({ path: '.env.local' });
+// --- MANUAL ENV LOADING ---
+function loadEnv() {
+    try {
+        const envPath = path.resolve(process.cwd(), '.env.local');
+        if (fs.existsSync(envPath)) {
+            const envConfig = fs.readFileSync(envPath, 'utf8');
+            envConfig.split('\n').forEach(line => {
+                const match = line.match(/^([^=]+)=(.*)$/);
+                if (match) {
+                    const key = match[1].trim();
+                    const value = match[2].trim().replace(/^["'](.*)["']$/, '$1');
+                    process.env[key] = value;
+                }
+            });
+            console.log("✅ Loaded .env.local manually.");
+        } else {
+            console.warn("⚠️ .env.local file not found.");
+        }
+    } catch (e) {
+        console.warn("⚠️ Could not read .env.local");
+    }
+}
 
+loadEnv();
+
+// --- MAIN CHECK ---
 async function main() {
-    console.log("🔍 STARING PRE-FLIGHT CHECK...");
+    console.log("🔍 STARING PRE-FLIGHT CHECK (Standalone Mode)...");
 
     // 1. Check ENV
     if (!process.env.DATABASE_URL) {
@@ -17,46 +39,46 @@ async function main() {
     }
     console.log("✅ Environment Variables loaded.");
 
-    // 2. Check Database Connection
+    // 2. Check Database Connection & Job Table
     console.log("⏳ Testing Database Connection...");
+    const pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
+    });
+
     try {
-        const client = await getDb().connect();
+        const client = await pool.connect();
         const res = await client.query('SELECT NOW()');
-        client.release();
         console.log(`✅ Database Connected! Time: ${res.rows[0].now}`);
+
+        // Initialize Jobs Table
+        console.log("⏳ Initializing Job Tables...");
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS processing_jobs (
+                id UUID PRIMARY KEY,
+                status TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                total_pages INTEGER DEFAULT 0,
+                processed_pages INTEGER DEFAULT 0,
+                current_step TEXT,
+                result_data JSONB,
+                error_message TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log("✅ Job Table Verified/Created.");
+
+        client.release();
     } catch (e: any) {
         console.error("❌ DATABASE CONNECTION FAILED:", e.message);
         console.error("   Check your .env.local and make sure Postgres is running (docker-compose up -d)");
         process.exit(1);
+    } finally {
+        await pool.end();
     }
 
-    // 3. Initialize Tables
-    console.log("⏳ Initializing Job Tables...");
-    try {
-        await initJobsTable();
-        console.log("✅ Job Table Verified.");
-    } catch (e: any) {
-        console.error("❌ HOST TABLE INIT FAILED:", e.message);
-        process.exit(1);
-    }
-
-    // 4. Test Logic (Mock)
-    console.log("⏳ Testing Core Logic...");
-    try {
-        const mockBuffer = Buffer.from("PDF Header");
-        const mockMarkdown = "# Test\n\nThis is a test document.";
-        const result = validateAndCleanMarkdown(mockMarkdown, mockBuffer);
-        if (result.validation_status === 'OK') {
-            console.log("✅ Core Logic (Validation) Passed.");
-        } else {
-            console.warn("⚠️ Core Logic Warning:", result.validation_status);
-        }
-    } catch (e: any) {
-        console.error("❌ CORE LOGIC CRASHED:", e.message);
-        process.exit(1);
-    }
-
-    console.log("\n🚀 ALL SYSTEMS GO! You can now run 'npm run dev' safely.");
+    console.log("\n🚀 ALL SYSTEMS GO! You can run 'npm run dev' safely.");
 }
 
 main().catch(console.error);
