@@ -5,6 +5,7 @@ import { validateAndCleanMarkdown, generateForensicCertificate } from '@/lib/val
 import { buildPageIndexTree } from '@/lib/pageindex';
 import { getUpload, deleteUpload } from '@/lib/chunk-store';
 import { getActualPageCount } from '@/lib/pdf-utils';
+import { calculateOptimalChunks } from '@/lib/pdf-splitter';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
@@ -116,12 +117,14 @@ export async function POST(request: NextRequest) {
 
         console.log(`Processing: ${filename}`);
 
-        const base64 = Buffer.from(arrayBuffer).toString('base64');
+        // Copy buffer before pdfjs detaches the ArrayBuffer
+        const originalBuffer = Buffer.from(arrayBuffer);
+        const base64 = originalBuffer.toString('base64');
 
         const model = genAI.getGenerativeModel({
             model: 'gemini-2.0-flash',
             generationConfig: {
-                maxOutputTokens: 16000,
+                maxOutputTokens: 32000,
             }
         });
 
@@ -129,20 +132,29 @@ export async function POST(request: NextRequest) {
         const totalPages = await getActualPageCount(arrayBuffer);
         console.log(`Total pages detected (PDF library): ${totalPages}`);
 
-        // Segundo: Extraer documento completo con prompt mejorado
-        const response = await model.generateContent([
-            {
-                inlineData: {
-                    mimeType: 'application/pdf',
-                    data: base64,
+        // Segundo: Extraer documento completo (con auto-split si >50 páginas)
+        const chunks = calculateOptimalChunks(totalPages);
+        let markdown: string;
+
+        if (chunks.length === 1) {
+            // PDF pequeño/mediano: procesamiento normal en una sola llamada
+            const response = await model.generateContent([
+                {
+                    inlineData: {
+                        mimeType: 'application/pdf',
+                        data: base64,
+                    },
                 },
-            },
-            {
-                text: `Extrae TODO el texto de este documento en Markdown bien estructurado.
+                {
+                    text: `Extrae TODO el texto de este documento en Markdown bien estructurado.
 
 REGLAS DE FORMATO:
 - Usa # para títulos principales, ## para secciones, ### para subsecciones
-- Las tablas deben tener formato Markdown correcto con fila separadora |---|---|
+- TABLAS: SIEMPRE usa formato Markdown válido con fila separadora. Ejemplo:
+  | Columna 1 | Columna 2 |
+  |---|---|
+  | dato | dato |
+  NUNCA omitas la fila |---|---| en ninguna tabla.
 - NO incluyas números de página sueltos
 - NO repitas encabezados o pies de página que aparezcan en cada hoja
 - Preserva TODA la información sustantiva del documento
@@ -152,13 +164,60 @@ REGLAS DE FORMATO:
 - Preserva negritas (**texto**) y cursivas (*texto*) donde existan
 
 Sé minucioso y preciso. No omitas contenido.`,
-            },
-        ]);
+                },
+            ]);
 
-        const markdown = response.response.text();
+            markdown = response.response.text();
+        } else {
+            // PDF grande (>50 páginas): auto-split en chunks
+            console.log(`[process-pdf] Large PDF detected (${totalPages} pages): splitting into ${chunks.length} chunks`);
+
+            let fullMarkdown = '';
+
+            for (const chunk of chunks) {
+                console.log(`[process-pdf] Processing chunk pages ${chunk.startPage}-${chunk.endPage}...`);
+
+                const chunkResponse = await model.generateContent([
+                    {
+                        inlineData: {
+                            mimeType: 'application/pdf',
+                            data: base64,
+                        },
+                    },
+                    {
+                        text: `Extrae SOLO las páginas ${chunk.startPage} a ${chunk.endPage} (inclusive) de este PDF.
+NO incluyas contenido de otras páginas.
+
+REGLAS DE FORMATO:
+- Usa # para títulos principales, ## para secciones, ### para subsecciones
+- TABLAS: SIEMPRE usa formato Markdown válido con fila separadora. Ejemplo:
+  | Columna 1 | Columna 2 |
+  |---|---|
+  | dato | dato |
+  NUNCA omitas la fila |---|---| en ninguna tabla.
+- NO incluyas números de página sueltos
+- NO repitas encabezados o pies de página que aparezcan en cada hoja
+- Preserva TODA la información sustantiva del documento
+- Listas con - o *
+- No dejes líneas en blanco excesivas (máximo 2 consecutivas)
+- Si hay texto en columnas, conviértelo a formato lineal legible
+- Preserva negritas (**texto**) y cursivas (*texto*) donde existan
+
+Sé minucioso y preciso. No omitas contenido.`,
+                    },
+                ]);
+
+                fullMarkdown += chunkResponse.response.text();
+                if (chunk !== chunks[chunks.length - 1]) {
+                    fullMarkdown += '\n\n';
+                }
+            }
+
+            markdown = fullMarkdown;
+            console.log(`[process-pdf] All ${chunks.length} chunks processed, total length: ${markdown.length}`);
+        }
 
         // Validación forense + limpieza de markdown
-        const originalBuffer = Buffer.from(arrayBuffer);
         const validation = validateAndCleanMarkdown(markdown, originalBuffer);
         const cleanedMarkdown = validation.cleaned_markdown;
 
