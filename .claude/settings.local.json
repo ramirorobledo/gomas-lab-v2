@@ -14,7 +14,9 @@
       "Bash(wc:*)",
       "Bash(curl:*)",
       "Bash(npx tsx:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(git rm:*)",
+      "Bash(npx kill-port:*)"
     ]
   }
 }

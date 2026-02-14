@@ -9,9 +9,6 @@ import { calculateOptimalChunks } from '@/lib/pdf-splitter';
 import { GEMINI_API_KEY } from '@/lib/env';
 import { saveChunk, assembleFile, cleanupChunks } from '@/lib/db-chunk-store';
 
-// Server Action configuration
-export const maxDuration = 60; // Max allowed for Hobby plan
-
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 interface ExtractionRange {
