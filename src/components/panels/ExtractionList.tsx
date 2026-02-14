@@ -26,14 +26,14 @@ export default function ExtractionList({
     maxPages
 }: ExtractionListProps) {
     const [from, setFrom] = useState(1);
-    const [to, setTo] = useState(10);
+    const [to, setTo] = useState(Math.min(10, maxPages || 10));
     const [name, setName] = useState("extraction_1");
 
     const handleAdd = () => {
         if (from > 0 && to <= maxPages && from <= to) {
             onAdd(from, to, name);
             setFrom(1);
-            setTo(10);
+            setTo(Math.min(10, maxPages || 10));
             setName(`extraction_${ranges.length + 2}`);
         }
     };
