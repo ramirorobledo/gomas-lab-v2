@@ -118,7 +118,12 @@ export async function POST(request: NextRequest) {
 
         const base64 = Buffer.from(arrayBuffer).toString('base64');
 
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        const model = genAI.getGenerativeModel({
+            model: 'gemini-2.0-flash',
+            generationConfig: {
+                maxOutputTokens: 16000,
+            }
+        });
 
         // Obtener número real de páginas via pdfjs-dist
         const totalPages = await getActualPageCount(arrayBuffer);
