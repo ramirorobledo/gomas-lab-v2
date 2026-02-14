@@ -12,6 +12,55 @@ interface ExtractionRange {
     name: string;
 }
 
+function estimateRangeSize(
+    totalBase64Length: number,
+    totalPages: number,
+    rangeStart: number,
+    rangeEnd: number
+): number {
+    const bytesPerPage = totalBase64Length / totalPages;
+    const rangePages = rangeEnd - rangeStart + 1;
+    return bytesPerPage * rangePages;
+}
+
+function shouldSplitRange(
+    totalBase64Length: number,
+    totalPages: number,
+    rangeStart: number,
+    rangeEnd: number
+): boolean {
+    const GEMINI_LIMIT = 20 * 1024 * 1024; // 20MB
+    const estimatedSize = estimateRangeSize(
+        totalBase64Length,
+        totalPages,
+        rangeStart,
+        rangeEnd
+    );
+    return estimatedSize > GEMINI_LIMIT;
+}
+
+function splitRangeIntoChunks(
+    totalBase64Length: number,
+    totalPages: number,
+    rangeStart: number,
+    rangeEnd: number
+): Array<{ start: number; end: number }> {
+    const GEMINI_LIMIT = 20 * 1024 * 1024;
+    const bytesPerPage = totalBase64Length / totalPages;
+    const maxPagesPerChunk = Math.floor(GEMINI_LIMIT / bytesPerPage);
+
+    const chunks: Array<{ start: number; end: number }> = [];
+    let currentStart = rangeStart;
+
+    while (currentStart <= rangeEnd) {
+        const currentEnd = Math.min(currentStart + maxPagesPerChunk - 1, rangeEnd);
+        chunks.push({ start: currentStart, end: currentEnd });
+        currentStart = currentEnd + 1;
+    }
+
+    return chunks;
+}
+
 export async function POST(request: NextRequest) {
     const startTime = Date.now();
 
@@ -94,34 +143,80 @@ export async function POST(request: NextRequest) {
         const mediumCount = validation.anomalies.filter(a => a.severity === 'medium').length;
         const validationScore = Math.max(0, 1.0 - (highCount * 0.3) - (mediumCount * 0.1));
 
-        // Tercero: Si hay rangos, procesarlos
+        // Tercero: Si hay rangos, procesarlos (auto-divide si > 20MB)
         let extractions = [];
         if (rangesStr) {
             try {
                 const ranges: ExtractionRange[] = JSON.parse(rangesStr);
 
                 for (const range of ranges) {
-                    console.log(`Extracting pages ${range.from}-${range.to}`);
+                    const base64Length = base64.length;
 
-                    const extractResponse = await model.generateContent([
-                        {
-                            inlineData: {
-                                mimeType: 'application/pdf',
-                                data: base64,
+                    // Verificar si el rango necesita dividirse
+                    if (shouldSplitRange(base64Length, totalPages, range.from, range.to)) {
+                        console.log(`Range ${range.from}-${range.to} exceeds 20MB, splitting...`);
+
+                        const chunks = splitRangeIntoChunks(
+                            base64Length,
+                            totalPages,
+                            range.from,
+                            range.to
+                        );
+
+                        console.log(`Split into ${chunks.length} chunks`);
+
+                        // Procesar todos los chunks en paralelo
+                        const chunkPromises = chunks.map((chunk) =>
+                            model.generateContent([
+                                {
+                                    inlineData: {
+                                        mimeType: 'application/pdf',
+                                        data: base64,
+                                    },
+                                },
+                                {
+                                    text: `Extrae SOLO y ÚNICAMENTE el contenido de las páginas ${chunk.start} a ${chunk.end} (inclusive) de este PDF. No incluyas nada de otras páginas. Formatea en Markdown bien estructurado.`,
+                                },
+                            ])
+                        );
+
+                        const chunkResponses = await Promise.all(chunkPromises);
+                        const concatenatedMarkdown = chunkResponses
+                            .map((resp) => resp.response.text())
+                            .join('\n\n---CHUNK SEPARATOR---\n\n');
+
+                        extractions.push({
+                            name: range.name,
+                            from: range.from,
+                            to: range.to,
+                            markdown: concatenatedMarkdown,
+                            chunked: true,
+                            chunkCount: chunks.length,
+                        });
+                    } else {
+                        // Rango pequeño, procesar normalmente
+                        console.log(`Extracting pages ${range.from}-${range.to}`);
+
+                        const extractResponse = await model.generateContent([
+                            {
+                                inlineData: {
+                                    mimeType: 'application/pdf',
+                                    data: base64,
+                                },
                             },
-                        },
-                        {
-                            text: `Extrae SOLO y ÚNICAMENTE el contenido de las páginas ${range.from} a ${range.to} (inclusive) de este PDF. No incluyas nada de otras páginas. Si una página no existe, indica que no existe. Formatea el resultado en Markdown bien estructurado.`,
-                        },
-                    ]);
+                            {
+                                text: `Extrae SOLO y ÚNICAMENTE el contenido de las páginas ${range.from} a ${range.to} (inclusive) de este PDF. No incluyas nada de otras páginas. Formatea en Markdown bien estructurado.`,
+                            },
+                        ]);
 
-                    const extractedMarkdown = extractResponse.response.text();
-                    extractions.push({
-                        name: range.name,
-                        from: range.from,
-                        to: range.to,
-                        markdown: extractedMarkdown
-                    });
+                        extractions.push({
+                            name: range.name,
+                            from: range.from,
+                            to: range.to,
+                            markdown: extractResponse.response.text(),
+                            chunked: false,
+                        });
+                    }
                 }
             } catch (e) {
                 console.error('Error parsing ranges:', e);
