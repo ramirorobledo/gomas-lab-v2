@@ -21,6 +21,50 @@ interface ExtractionRange {
     name: string;
 }
 
+const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB per chunk
+const SIZE_THRESHOLD = 8 * 1024 * 1024; // 8MB threshold for chunked upload
+
+async function uploadChunked(
+    file: File,
+    onProgress: (fraction: number) => void
+): Promise<string> {
+    const uploadId = crypto.randomUUID();
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+    for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunkBlob = file.slice(start, end);
+
+        const formData = new FormData();
+        formData.append('chunk', chunkBlob);
+        formData.append('uploadId', uploadId);
+        formData.append('chunkIndex', String(i));
+        formData.append('totalChunks', String(totalChunks));
+        formData.append('totalSize', String(file.size));
+        formData.append('filename', file.name);
+
+        const response = await fetch('/api/upload-chunk', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Chunk ${i + 1} upload failed`);
+        }
+
+        const result = await response.json();
+        onProgress((i + 1) / totalChunks);
+
+        if (i === totalChunks - 1 && !result.complete) {
+            throw new Error('All chunks sent but server reports incomplete');
+        }
+    }
+
+    return uploadId;
+}
+
 export function Workspace() {
     const [file, setFile] = useState<File | null>(null);
     const [processing, setProcessing] = useState(false);
@@ -28,6 +72,8 @@ export function Workspace() {
     const [activeTab, setActiveTab] = useState("certificate");
     const [extractionRanges, setExtractionRanges] = useState<ExtractionRange[]>([]);
     const [numPages, setNumPages] = useState(0);
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'processing'>('idle');
 
     const handleFileDrop = (droppedFile: File) => {
         setFile(droppedFile);
@@ -46,18 +92,38 @@ export function Workspace() {
         if (!file) return;
 
         setProcessing(true);
+        setUploadProgress(0);
 
         try {
+            let uploadId: string | null = null;
+
+            if (file.size > SIZE_THRESHOLD) {
+                // Large file: chunked upload phase
+                setUploadPhase('uploading');
+                uploadId = await uploadChunked(file, (fraction) => {
+                    setUploadProgress(fraction);
+                });
+            }
+
+            // Processing phase
+            setUploadPhase('processing');
             const formData = new FormData();
-            formData.append("file", file);
-            formData.append("ranges", JSON.stringify(extractionRanges));
+            if (uploadId) {
+                formData.append('uploadId', uploadId);
+            } else {
+                formData.append('file', file);
+            }
+            formData.append('ranges', JSON.stringify(extractionRanges));
 
             const response = await fetch("/api/process-pdf", {
                 method: "POST",
                 body: formData,
             });
 
-            if (!response.ok) throw new Error("Processing failed");
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || "Processing failed");
+            }
 
             const data = await response.json();
             setNumPages(data.pageCount);
@@ -82,6 +148,8 @@ export function Workspace() {
             alert("Error procesando documento");
         } finally {
             setProcessing(false);
+            setUploadPhase('idle');
+            setUploadProgress(0);
         }
     };
 
@@ -109,6 +177,8 @@ export function Workspace() {
                                 onFileDrop={handleFileDrop}
                                 file={file}
                                 loading={processing}
+                                uploadProgress={uploadProgress}
+                                uploadPhase={uploadPhase}
                             />
                         </div>
 
@@ -131,7 +201,11 @@ export function Workspace() {
                                 disabled={processing}
                                 className="w-full px-4 py-3 bg-primary/20 hover:bg-primary/40 disabled:bg-gray-700 text-white font-tech rounded-sm transition-all border border-primary/50 uppercase tracking-wider text-xs shadow-[0_0_15px_rgba(99,102,241,0.2)]"
                             >
-                                {processing ? "⏳ Procesando..." : "▶️ Procesar Documento Completo"}
+                                {processing
+                                    ? uploadPhase === 'uploading'
+                                        ? `SUBIENDO ${Math.round(uploadProgress * 100)}%`
+                                        : "PROCESANDO..."
+                                    : "Procesar Documento Completo"}
                             </button>
                         )}
 
@@ -166,7 +240,19 @@ export function Workspace() {
                                     {extractionRanges.length > 0 && (
                                         <p className="text-primary">&gt; [EXTRACT] {extractionRanges.length} rango(s) configurado(s)</p>
                                     )}
-                                    {processing && (
+                                    {processing && uploadPhase === 'uploading' && (
+                                        <>
+                                            <p className="text-primary">&gt; [UPLOAD] Subiendo archivo en fragmentos...</p>
+                                            <p className="text-primary">&gt; [UPLOAD] Progreso: {Math.round(uploadProgress * 100)}%</p>
+                                            <div className="mt-1 h-1.5 bg-base border border-primary/30 rounded-sm overflow-hidden">
+                                                <div
+                                                    className="h-full bg-primary transition-all duration-300 ease-out"
+                                                    style={{ width: `${uploadProgress * 100}%` }}
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+                                    {processing && uploadPhase === 'processing' && (
                                         <>
                                             <p className="text-primary">&gt; [OCR] Extrayendo texto...</p>
                                             <p className="text-primary">&gt; [VLM] Analizando estructura...</p>

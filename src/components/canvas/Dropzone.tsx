@@ -4,9 +4,11 @@ interface DropzoneProps {
     onFileDrop: (file: File) => void;
     file: File | null;
     loading: boolean;
+    uploadProgress?: number;
+    uploadPhase?: 'idle' | 'uploading' | 'processing';
 }
 
-export default function Dropzone({ onFileDrop, file, loading }: DropzoneProps) {
+export default function Dropzone({ onFileDrop, file, loading, uploadProgress = 0, uploadPhase = 'idle' }: DropzoneProps) {
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         if (loading) return;
@@ -75,8 +77,18 @@ export default function Dropzone({ onFileDrop, file, loading }: DropzoneProps) {
                 <div className="text-center w-full z-10">
                     <div className="inline-block w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
                     <div className="font-tech text-xs text-primary uppercase tracking-widest animate-pulse">
-                        PROCESSING...
+                        {uploadPhase === 'uploading'
+                            ? `UPLOADING ${Math.round(uploadProgress * 100)}%`
+                            : 'PROCESSING...'}
                     </div>
+                    {uploadPhase === 'uploading' && (
+                        <div className="mt-3 mx-8 h-1 bg-base border border-primary/30 rounded-sm overflow-hidden">
+                            <div
+                                className="h-full bg-primary transition-all duration-300"
+                                style={{ width: `${uploadProgress * 100}%` }}
+                            />
+                        </div>
+                    )}
                 </div>
             )}
         </div>
