@@ -8,49 +8,7 @@ import { VisualFeed } from "../panels/VisualFeed";
 import ExtractionList from "../panels/ExtractionList";
 import type { ProcessedDocument, ExtractionRange, CertificateData } from "@/lib/types";
 
-const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB per chunk
-const SIZE_THRESHOLD = 8 * 1024 * 1024; // 8MB threshold for chunked upload
-
-async function uploadChunked(
-    file: File,
-    onProgress: (fraction: number) => void
-): Promise<string> {
-    const uploadId = crypto.randomUUID();
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-
-    for (let i = 0; i < totalChunks; i++) {
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const chunkBlob = file.slice(start, end);
-
-        const formData = new FormData();
-        formData.append('chunk', chunkBlob);
-        formData.append('uploadId', uploadId);
-        formData.append('chunkIndex', String(i));
-        formData.append('totalChunks', String(totalChunks));
-        formData.append('totalSize', String(file.size));
-        formData.append('filename', file.name);
-
-        const response = await fetch('/api/upload-chunk', {
-            method: 'POST',
-            body: formData,
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `Chunk ${i + 1} upload failed`);
-        }
-
-        const result = await response.json();
-        onProgress((i + 1) / totalChunks);
-
-        if (i === totalChunks - 1 && !result.complete) {
-            throw new Error('All chunks sent but server reports incomplete');
-        }
-    }
-
-    return uploadId;
-}
+import { processDocumentAction } from "@/app/actions";
 
 export function Workspace() {
     const [file, setFile] = useState<File | null>(null);
@@ -79,60 +37,41 @@ export function Workspace() {
         if (!file) return;
 
         setProcessing(true);
-        setUploadProgress(0);
+        setUploadProgress(0); // Server actions don't report upload progress easily
 
         try {
-            let uploadId: string | null = null;
-
-            if (file.size > SIZE_THRESHOLD) {
-                // Large file: chunked upload phase
-                setUploadPhase('uploading');
-                uploadId = await uploadChunked(file, (fraction) => {
-                    setUploadProgress(fraction);
-                });
-            }
-
             // Processing phase
             setUploadPhase('processing');
             const formData = new FormData();
-            if (uploadId) {
-                formData.append('uploadId', uploadId);
-            } else {
-                formData.append('file', file);
-            }
+            formData.append('file', file);
             formData.append('ranges', JSON.stringify(extractionRanges));
 
-            const response = await fetch("/api/process-pdf", {
-                method: "POST",
-                body: formData,
-            });
+            const data = await processDocumentAction(formData);
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || "Processing failed");
+            if (!data.success) {
+                throw new Error(data.error || "Processing failed");
             }
 
-            const data = await response.json();
-            setNumPages(data.pageCount);
+            setNumPages(data.pageCount || 0);
             setProcessed({
-                markdown: data.markdown,
+                markdown: data.markdown || "",
                 certificateData: data.certificate ? {
-                    hash_original: data.certificate.hash_original,
-                    hash_markdown: data.certificate.hash_markdown,
-                    timestamp: data.certificate.timestamp,
-                    validation_status: data.certificate.status,
-                    vlm_used: 'gemini-2.0-flash',
-                    processing_time_ms: data.processingTime,
+                    hash_original: data.certificate.hash_original || "",
+                    hash_markdown: data.certificate.hash_markdown || "",
+                    timestamp: data.certificate.timestamp || "",
+                    validation_status: data.certificate.status || "ERROR",
+                    vlm_used: 'gemini-1.5-flash',
+                    processing_time_ms: data.processingTime || 0,
                     anomalies_count: data.anomalies?.length || 0,
-                    integrity_hash: data.certificate.integrity_hash,
+                    integrity_hash: data.certificate.integrity_hash || "",
                 } as CertificateData : null,
                 anomalies: data.anomalies || [],
                 extractions: data.extractions || [],
-                pageCount: data.pageCount,
+                pageCount: data.pageCount || 0,
             });
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error processing file:", error);
-            alert("Error procesando documento");
+            alert(`Error procesando documento: ${error.message}`);
         } finally {
             setProcessing(false);
             setUploadPhase('idle');
