@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface ExtractionRange {
     from: number;
@@ -28,6 +28,10 @@ export default function ExtractionList({
     const [from, setFrom] = useState(1);
     const [to, setTo] = useState(Math.min(10, maxPages || 10));
     const [name, setName] = useState("extraction_1");
+
+    useEffect(() => {
+        setTo((prev) => Math.min(prev, Math.min(10, maxPages || 10)));
+    }, [maxPages]);
 
     const handleAdd = () => {
         if (from > 0 && to <= maxPages && from <= to) {
