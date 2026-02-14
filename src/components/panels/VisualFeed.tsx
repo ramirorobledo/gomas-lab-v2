@@ -4,18 +4,12 @@ import React, { useState } from "react";
 import { Editor } from "./Editor";
 import { Certificate } from "./Certificate";
 import { Anomalies } from "./Anomalies";
-
-interface Extraction {
-    name: string;
-    from: number;
-    to: number;
-    markdown: string;
-}
+import type { CertificateData, Anomaly, Extraction } from "@/lib/types";
 
 interface VisualFeedProps {
     markdown?: string;
-    certificateData?: any;
-    anomalies?: any[];
+    certificateData?: CertificateData | null;
+    anomalies?: Anomaly[];
     extractions?: Extraction[];
     loading?: boolean;
     onMarkdownChange?: (value: string) => void;

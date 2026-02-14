@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import type { CertificateData } from "@/lib/types";
 
 interface SidebarProps {
     activeTab: string;
     onSwitchTab: (tab: string) => void;
-    certificateData?: any;
+    certificateData?: CertificateData | null;
 }
 
 export default function Sidebar({ activeTab, onSwitchTab, certificateData }: SidebarProps) {
@@ -101,16 +102,24 @@ export default function Sidebar({ activeTab, onSwitchTab, certificateData }: Sid
                                 <div className="space-y-3 text-[11px]">
                                     <div className="border-l-2 border-primary pl-3">
                                         <p className="text-muted font-mono">Status</p>
-                                        <p className="text-success font-tech">✓ CERTIFIED</p>
+                                        <p className={`font-tech ${certificateData.validation_status === 'OK' ? 'text-success' :
+                                                certificateData.validation_status === 'ALERT' ? 'text-alert' : 'text-danger'
+                                            }`}>{certificateData.validation_status === 'OK' ? '✓' : '⚠'} {certificateData.validation_status}</p>
                                     </div>
                                     <div className="border-l-2 border-primary pl-3">
-                                        <p className="text-muted font-mono">Score</p>
-                                        <p className="text-primary font-data">90%</p>
+                                        <p className="text-muted font-mono">Anomalías</p>
+                                        <p className="text-primary font-data">{certificateData.anomalies_count}</p>
                                     </div>
                                     <div className="border-l-2 border-primary pl-3">
                                         <p className="text-muted font-mono">Hash SHA256</p>
-                                        <p className="text-gray-400 font-mono truncate text-[10px]">a1b2c3d4...</p>
+                                        <p className="text-gray-400 font-mono truncate text-[10px]">{certificateData.hash_original?.slice(0, 16)}...</p>
                                     </div>
+                                    {certificateData.processing_time_ms > 0 && (
+                                        <div className="border-l-2 border-primary pl-3">
+                                            <p className="text-muted font-mono">Tiempo</p>
+                                            <p className="text-primary font-data">{(certificateData.processing_time_ms / 1000).toFixed(1)}s</p>
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="text-center text-muted text-xs font-data">

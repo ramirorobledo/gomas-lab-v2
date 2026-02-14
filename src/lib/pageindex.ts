@@ -1,3 +1,5 @@
+import { removePageHeaders } from './validation';
+
 interface TreeNode {
     id: string;
     title: string;
@@ -5,7 +7,6 @@ interface TreeNode {
     content: string;
     children: TreeNode[];
     metadata: {
-        page?: number;
         type?: "title" | "section" | "subsection" | "paragraph";
         expediente?: string;
     };
@@ -22,60 +23,8 @@ interface PageIndexTree {
     };
 }
 
-/**
- * Detecta y elimina líneas que se repiten en múltiples páginas (headers/footers)
- * Incluye: números de página sueltos, Folio/Foja, "X de Y", romanos, watermarks
- */
-function filterRepeatedHeadersFooters(lines: string[]): string[] {
-    const MIN_REPEATS = 3;
-    const lineFrequency = new Map<string, number>();
-
-    // Contar frecuencia de cada línea no vacía (normalizada)
-    for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        if (/^#{1,6}\s+/.test(trimmed)) continue; // no contar headers markdown
-        const normalized = trimmed
-            .replace(/\d+/g, "#")
-            .replace(/\s+/g, " ");
-        if (normalized.length > 2 && normalized.length < 200) {
-            lineFrequency.set(normalized, (lineFrequency.get(normalized) || 0) + 1);
-        }
-    }
-
-    const repeatedPatterns = new Set<string>();
-    for (const [pattern, count] of lineFrequency) {
-        if (count >= MIN_REPEATS) {
-            repeatedPatterns.add(pattern);
-        }
-    }
-
-    // Filtrar
-    return lines.filter((line) => {
-        const trimmed = line.trim();
-        if (!trimmed) return true;
-        if (/^#{1,6}\s+/.test(trimmed)) return true;
-
-        // Números de página sueltos (excluir años)
-        if (/^\d{1,4}$/.test(trimmed)) {
-            const num = parseInt(trimmed, 10);
-            if (num < 1900 || num > 2099) return false;
-        }
-
-        // Página X, Folio X, Foja X, X de Y
-        if (/^\s*(?:Página|Page|Pág\.?|Folio|Foja)s?\s+\d+/i.test(trimmed)) return false;
-        if (/^\s*\d{1,4}\s+de\s+\d{1,4}\s*$/i.test(trimmed)) return false;
-
-        // Romanos sueltos
-        if (/^[ivxlcdm]{1,6}$/i.test(trimmed)) return false;
-
-        // Patrones repetidos
-        const normalized = trimmed.replace(/\d+/g, "#").replace(/\s+/g, " ");
-        if (repeatedPatterns.has(normalized)) return false;
-
-        return true;
-    });
-}
+// Header/footer filtering is now handled by removePageHeaders() from validation.ts
+// which is called before buildPageIndexTree() in the processing pipeline.
 
 /**
  * Parsea Markdown y construye árbol jerárquico (PageIndex-like)
@@ -87,8 +36,9 @@ export function buildPageIndexTree(
         juzgado?: string;
     }
 ): PageIndexTree {
-    const rawLines = markdown.split("\n");
-    const lines = filterRepeatedHeadersFooters(rawLines);
+    // Use shared removePageHeaders from validation.ts for consistency
+    const { cleaned } = removePageHeaders(markdown);
+    const lines = cleaned.split("\n");
     const root: TreeNode = {
         id: "root",
         title: "Document",
@@ -131,7 +81,7 @@ export function buildPageIndexTree(
                 content: "",
                 children: [],
                 metadata: {
-                    page: Math.floor(idx / 50), // Estimación
+                    // Page number cannot be reliably determined from markdown alone
                     type: level === 1 ? "section" : level === 2 ? "subsection" : "paragraph",
                     expediente: legalMetadata?.expediente,
                 },

@@ -6,11 +6,12 @@ import { buildPageIndexTree } from '@/lib/pageindex';
 import { getUpload, deleteUpload } from '@/lib/chunk-store';
 import { getActualPageCount } from '@/lib/pdf-utils';
 import { calculateOptimalChunks } from '@/lib/pdf-splitter';
+import { GEMINI_API_KEY } from '@/lib/env';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 interface ExtractionRange {
     from: number;
@@ -345,7 +346,7 @@ Sé minucioso y preciso. No omitas contenido.`,
             certificate: {
                 hash_original: certificate.hash_original,
                 hash_markdown: certificate.hash_markdown,
-                digital_signature: certificate.digital_signature,
+                integrity_hash: certificate.integrity_hash,
                 timestamp: certificate.timestamp,
                 status: certificate.validation_status,
             },

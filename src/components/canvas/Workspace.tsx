@@ -6,20 +6,7 @@ import SystemHeader from "../hud/SystemHeader";
 import Dropzone from "./Dropzone";
 import { VisualFeed } from "../panels/VisualFeed";
 import ExtractionList from "../panels/ExtractionList";
-
-interface ProcessedDocument {
-    markdown: string;
-    certificateData: any;
-    anomalies: any[];
-    extractions?: any[];
-    pageCount: number;
-}
-
-interface ExtractionRange {
-    from: number;
-    to: number;
-    name: string;
-}
+import type { ProcessedDocument, ExtractionRange, CertificateData } from "@/lib/types";
 
 const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB per chunk
 const SIZE_THRESHOLD = 8 * 1024 * 1024; // 8MB threshold for chunked upload
@@ -137,8 +124,8 @@ export function Workspace() {
                     vlm_used: 'gemini-2.0-flash',
                     processing_time_ms: data.processingTime,
                     anomalies_count: data.anomalies?.length || 0,
-                    digital_signature: data.certificate.digital_signature,
-                } : null,
+                    integrity_hash: data.certificate.integrity_hash,
+                } as CertificateData : null,
                 anomalies: data.anomalies || [],
                 extractions: data.extractions || [],
                 pageCount: data.pageCount,

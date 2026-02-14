@@ -1,14 +1,7 @@
 "use client";
 
 import React from "react";
-
-interface Anomaly {
-    type: string;
-    location?: string;
-    severity?: "low" | "medium" | "high";
-    description: string;
-    action_taken?: string;
-}
+import type { Anomaly } from "@/lib/types";
 
 interface AnomaliesProps {
     anomalies?: Anomaly[];
@@ -19,13 +12,13 @@ export function Anomalies({ anomalies = [], loading = false }: AnomaliesProps) {
     const getSeverityColor = (severity?: string) => {
         switch (severity) {
             case "high":
-                return "bg-red-900/30 border-red-700 text-red-400";
+                return "bg-danger/10 border-danger/50 text-danger";
             case "medium":
-                return "bg-yellow-900/30 border-yellow-700 text-yellow-400";
+                return "bg-alert/10 border-alert/50 text-alert";
             case "low":
-                return "bg-blue-900/30 border-blue-700 text-blue-400";
+                return "bg-process/10 border-process/50 text-process";
             default:
-                return "bg-slate-900/30 border-slate-700 text-slate-400";
+                return "bg-panel/30 border-border text-muted";
         }
     };
 
@@ -45,15 +38,15 @@ export function Anomalies({ anomalies = [], loading = false }: AnomaliesProps) {
     if (loading) {
         return (
             <div className="anomalies-container h-full flex items-center justify-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
         );
     }
 
     return (
         <div className="anomalies-container h-full flex flex-col overflow-hidden">
-            <div className="anomalies-header px-4 py-3 border-b border-slate-700 bg-slate-900/50">
-                <h3 className="text-sm font-semibold text-slate-300">
+            <div className="anomalies-header px-4 py-3 border-b border-border bg-panel/50">
+                <h3 className="text-sm font-tech text-primary uppercase tracking-widest">
                     ⚠️ Anomalías Detectadas ({anomalies.length})
                 </h3>
             </div>
@@ -90,7 +83,7 @@ export function Anomalies({ anomalies = [], loading = false }: AnomaliesProps) {
                         </div>
                     ))
                 ) : (
-                    <div className="h-full flex items-center justify-center text-slate-400">
+                    <div className="h-full flex items-center justify-center text-muted">
                         <p className="text-sm">✓ Sin anomalías detectadas</p>
                     </div>
                 )}

@@ -1,3 +1,15 @@
+/**
+ * In-memory chunk upload storage.
+ *
+ * ⚠️ SERVERLESS WARNING: This module uses in-memory storage via globalThis.
+ * In multi-instance serverless environments (e.g. Vercel), each function
+ * invocation may run in a separate instance with its own memory space.
+ * Chunks uploaded to one instance will NOT be visible to another.
+ *
+ * For production, replace with Redis, S3, or another shared store.
+ *
+ * TTL: Uploads expire after 10 minutes of inactivity.
+ */
 interface ChunkUpload {
     sessionId: string;
     filename: string;

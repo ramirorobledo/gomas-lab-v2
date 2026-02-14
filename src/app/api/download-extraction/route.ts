@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
             headers: {
                 'Content-Type': 'text/markdown; charset=utf-8',
                 'Content-Disposition': `attachment; filename="${safeName}.md"`,
+                'Content-Length': buffer.byteLength.toString(),
             },
         });
     } catch (error) {

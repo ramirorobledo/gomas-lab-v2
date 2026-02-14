@@ -59,8 +59,9 @@ function extractLegalElements(markdown: string) {
     legalElements.articulos = articuloMatches?.length || 0;
 
     // Contar tablas
-    const tableMatches = markdown.match(/\|[\s\S]*?\|/g);
-    legalElements.tablas = tableMatches?.length || 0;
+    // Count actual table blocks by counting separator rows (|---|---|)
+    const tableSeparators = markdown.match(/^\|?\s*[-:\s]+(\|\s*[-:\s]+)+\|?\s*$/gm);
+    legalElements.tablas = tableSeparators?.length || 0;
 
     return legalElements;
 }
@@ -179,7 +180,7 @@ function transformTocDots(markdown: string): string {
  *   - Patrones repetidos (headers/footers de PDF)
  *   - Confidencialidad / watermarks repetidos
  */
-function removePageHeaders(markdown: string): { cleaned: string; removed: number } {
+export function removePageHeaders(markdown: string): { cleaned: string; removed: number } {
     let removed = 0;
 
     // FASE 1: Transformar TOC dots
@@ -422,7 +423,7 @@ export function generateForensicCertificate(
     return {
         hash_original: validation.hash_original,
         hash_markdown: validation.hash_markdown,
-        digital_signature: generateHash(
+        integrity_hash: generateHash(
             validation.hash_original + validation.hash_markdown + Date.now()
         ),
         signing_key_id: "gomas-lab-v2-" + new Date().getFullYear(),

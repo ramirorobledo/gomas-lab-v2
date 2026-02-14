@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npx next build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run dev:*)",
+      "Bash(node -e:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(wc:*)",
+      "Bash(curl:*)",
+      "Bash(npx tsx:*)",
+      "Bash(taskkill:*)"
+    ]
+  }
+}

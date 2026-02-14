@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Orbitron, Rajdhani } from "next/font/google";
 import "./globals.css";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const orbitron = Orbitron({ subsets: ["latin"], variable: "--font-orbitron" });
@@ -23,7 +24,9 @@ export default function RootLayout({
   return (
     <html lang="es" className={`${inter.variable} ${orbitron.variable} ${rajdhani.variable} h-full w-full`}>
       <body className="antialiased font-sans text-sm selection:bg-primary selection:text-white flex h-full w-full overflow-hidden">
-        {children}
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
       </body>
     </html>
   );
