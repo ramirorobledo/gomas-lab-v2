@@ -13,7 +13,6 @@ interface ProcessedDocument {
     anomalies: any[];
     extractions?: any[];
     pageCount: number;
-    cost: number;
 }
 
 interface ExtractionRange {
@@ -64,11 +63,19 @@ export function Workspace() {
             setNumPages(data.pageCount);
             setProcessed({
                 markdown: data.markdown,
-                certificateData: data.certificateData,
+                certificateData: data.certificate ? {
+                    hash_original: data.certificate.hash_original,
+                    hash_markdown: data.certificate.hash_markdown,
+                    timestamp: data.certificate.timestamp,
+                    validation_status: data.certificate.status,
+                    vlm_used: 'gemini-2.0-flash',
+                    processing_time_ms: data.processingTime,
+                    anomalies_count: data.anomalies?.length || 0,
+                    digital_signature: data.certificate.digital_signature,
+                } : null,
                 anomalies: data.anomalies || [],
                 extractions: data.extractions || [],
                 pageCount: data.pageCount,
-                cost: data.cost,
             });
         } catch (error) {
             console.error("Error processing file:", error);

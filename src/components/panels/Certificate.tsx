@@ -5,6 +5,7 @@ import React from "react";
 interface CertificateData {
     hash_original?: string;
     hash_markdown?: string;
+    digital_signature?: string;
     vlm_used?: string;
     timestamp?: string;
     validation_status?: "OK" | "ALERT" | "FAILED";
@@ -61,6 +62,13 @@ export function Certificate({ data, loading = false }: CertificateProps) {
                             <div className="cert-item bg-slate-900/50 p-3 rounded border border-slate-700">
                                 <p className="text-xs text-slate-400 mb-1">Hash Markdown</p>
                                 <p className="text-xs font-mono text-slate-300 break-all">{data.hash_markdown}</p>
+                            </div>
+                        )}
+
+                        {data.digital_signature && (
+                            <div className="cert-item bg-slate-900/50 p-3 rounded border border-slate-700">
+                                <p className="text-xs text-slate-400 mb-1">Firma Digital</p>
+                                <p className="text-xs font-mono text-slate-300 break-all">{data.digital_signature}</p>
                             </div>
                         )}
 
