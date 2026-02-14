@@ -194,6 +194,8 @@ function removePageHeaders(markdown: string): { cleaned: string; removed: number
         const trimmed = line.trim();
         if (!trimmed) continue;
         if (trimmed.match(/^#{1,6}\s+/)) continue; // no contar headers markdown
+        // no contar filas separadoras de tabla (|---|---|)
+        if (/^\|?\s*[-:\s]+(\|\s*[-:\s]+)+\|?\s*$/.test(trimmed)) continue;
 
         // Normalizar: quitar números variables para detectar patrones
         const normalized = trimmed
@@ -283,6 +285,11 @@ function removePageHeaders(markdown: string): { cleaned: string; removed: number
         }
 
         // --- Líneas repetidas frecuentemente (headers/footers de PDF) ---
+        // Nunca eliminar filas separadoras de tabla
+        if (/^\|?\s*[-:\s]+(\|\s*[-:\s]+)+\|?\s*$/.test(trimmed)) {
+            processedLines.push(line);
+            return;
+        }
         if (trimmed && !/^#{1,6}\s+/.test(trimmed)) {
             const normalized = trimmed
                 .replace(/\d+/g, "#")

@@ -12,7 +12,14 @@ interface ChunkUpload {
 const TTL_MS = 10 * 60 * 1000; // 10 minutes
 const SWEEP_INTERVAL_MS = 60 * 1000;
 
-const uploads = new Map<string, ChunkUpload>();
+// Use globalThis to persist across Next.js HMR module reloads
+const globalForStore = globalThis as unknown as {
+    __chunkUploads?: Map<string, ChunkUpload>;
+};
+if (!globalForStore.__chunkUploads) {
+    globalForStore.__chunkUploads = new Map();
+}
+const uploads = globalForStore.__chunkUploads;
 
 // TTL sweep - runs once at module scope
 const sweepTimer = setInterval(() => {
