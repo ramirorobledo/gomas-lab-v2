@@ -24,25 +24,25 @@ interface PageIndexTree {
 
 /**
  * Detecta y elimina líneas que se repiten en múltiples páginas (headers/footers)
+ * Incluye: números de página sueltos, Folio/Foja, "X de Y", romanos, watermarks
  */
 function filterRepeatedHeadersFooters(lines: string[]): string[] {
-    const MIN_REPEATS = 3; // mínimo de repeticiones para considerar header/footer
+    const MIN_REPEATS = 3;
     const lineFrequency = new Map<string, number>();
 
     // Contar frecuencia de cada línea no vacía (normalizada)
     for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
-        // Ignorar headers markdown (son legítimos)
-        if (trimmed.match(/^#{1,6}\s+/)) continue;
-        // Normalizar: quitar números de página variables
+        if (/^#{1,6}\s+/.test(trimmed)) continue; // no contar headers markdown
         const normalized = trimmed
-            .replace(/\d+/g, '#')  // reemplazar números con placeholder
-            .replace(/\s+/g, ' '); // normalizar espacios
-        lineFrequency.set(normalized, (lineFrequency.get(normalized) || 0) + 1);
+            .replace(/\d+/g, "#")
+            .replace(/\s+/g, " ");
+        if (normalized.length > 2 && normalized.length < 200) {
+            lineFrequency.set(normalized, (lineFrequency.get(normalized) || 0) + 1);
+        }
     }
 
-    // Identificar patrones repetidos (headers/footers)
     const repeatedPatterns = new Set<string>();
     for (const [pattern, count] of lineFrequency) {
         if (count >= MIN_REPEATS) {
@@ -50,19 +50,30 @@ function filterRepeatedHeadersFooters(lines: string[]): string[] {
         }
     }
 
-    if (repeatedPatterns.size === 0) return lines;
-
-    // Filtrar líneas que matchean patrones repetidos
+    // Filtrar
     return lines.filter((line) => {
         const trimmed = line.trim();
-        if (!trimmed) return true; // preservar líneas vacías
-        if (trimmed.match(/^#{1,6}\s+/)) return true; // preservar headers markdown
+        if (!trimmed) return true;
+        if (/^#{1,6}\s+/.test(trimmed)) return true;
 
-        const normalized = trimmed
-            .replace(/\d+/g, '#')
-            .replace(/\s+/g, ' ');
+        // Números de página sueltos (excluir años)
+        if (/^\d{1,4}$/.test(trimmed)) {
+            const num = parseInt(trimmed, 10);
+            if (num < 1900 || num > 2099) return false;
+        }
 
-        return !repeatedPatterns.has(normalized);
+        // Página X, Folio X, Foja X, X de Y
+        if (/^\s*(?:Página|Page|Pág\.?|Folio|Foja)s?\s+\d+/i.test(trimmed)) return false;
+        if (/^\s*\d{1,4}\s+de\s+\d{1,4}\s*$/i.test(trimmed)) return false;
+
+        // Romanos sueltos
+        if (/^[ivxlcdm]{1,6}$/i.test(trimmed)) return false;
+
+        // Patrones repetidos
+        const normalized = trimmed.replace(/\d+/g, "#").replace(/\s+/g, " ");
+        if (repeatedPatterns.has(normalized)) return false;
+
+        return true;
     });
 }
 

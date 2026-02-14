@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
         const totalPages = await getActualPageCount(arrayBuffer);
         console.log(`Total pages detected (PDF library): ${totalPages}`);
 
-        // Segundo: Extraer documento completo
+        // Segundo: Extraer documento completo con prompt mejorado
         const response = await model.generateContent([
             {
                 inlineData: {
@@ -133,7 +133,20 @@ export async function POST(request: NextRequest) {
                 },
             },
             {
-                text: 'Extrae TODO el texto de este documento legal en Markdown bien estructurado. Sé minucioso.',
+                text: `Extrae TODO el texto de este documento en Markdown bien estructurado.
+
+REGLAS DE FORMATO:
+- Usa # para títulos principales, ## para secciones, ### para subsecciones
+- Las tablas deben tener formato Markdown correcto con fila separadora |---|---|
+- NO incluyas números de página sueltos
+- NO repitas encabezados o pies de página que aparezcan en cada hoja
+- Preserva TODA la información sustantiva del documento
+- Listas con - o *
+- No dejes líneas en blanco excesivas (máximo 2 consecutivas)
+- Si hay texto en columnas, conviértelo a formato lineal legible
+- Preserva negritas (**texto**) y cursivas (*texto*) donde existan
+
+Sé minucioso y preciso. No omitas contenido.`,
             },
         ]);
 
@@ -190,7 +203,7 @@ export async function POST(request: NextRequest) {
                                     },
                                 },
                                 {
-                                    text: `Extrae SOLO y ÚNICAMENTE el contenido de las páginas ${chunk.start} a ${chunk.end} (inclusive) de este PDF. No incluyas nada de otras páginas. Formatea en Markdown bien estructurado.`,
+                                    text: `Extrae SOLO el contenido de las páginas ${chunk.start} a ${chunk.end} (inclusive). No incluyas contenido de otras páginas. Usa Markdown bien estructurado: # títulos, ## secciones, tablas con |---|---| separador. NO incluyas números de página ni encabezados/pies repetidos.`,
                                 },
                             ])
                         );
@@ -200,11 +213,17 @@ export async function POST(request: NextRequest) {
                             .map((resp) => resp.response.text())
                             .join('\n\n---CHUNK SEPARATOR---\n\n');
 
+                        // Limpiar markdown del rango chunkeado
+                        const chunkValidation = validateAndCleanMarkdown(
+                            concatenatedMarkdown,
+                            originalBuffer
+                        );
+
                         extractions.push({
                             name: range.name,
                             from: range.from,
                             to: range.to,
-                            markdown: concatenatedMarkdown,
+                            markdown: chunkValidation.cleaned_markdown,
                             chunked: true,
                             chunkCount: chunks.length,
                         });
@@ -220,15 +239,21 @@ export async function POST(request: NextRequest) {
                                 },
                             },
                             {
-                                text: `Extrae SOLO y ÚNICAMENTE el contenido de las páginas ${range.from} a ${range.to} (inclusive) de este PDF. No incluyas nada de otras páginas. Formatea en Markdown bien estructurado.`,
+                                text: `Extrae SOLO el contenido de las páginas ${range.from} a ${range.to} (inclusive). No incluyas contenido de otras páginas. Usa Markdown bien estructurado: # títulos, ## secciones, tablas con |---|---| separador. NO incluyas números de página ni encabezados/pies repetidos.`,
                             },
                         ]);
+
+                        // Limpiar markdown del rango
+                        const rangeValidation = validateAndCleanMarkdown(
+                            extractResponse.response.text(),
+                            originalBuffer
+                        );
 
                         extractions.push({
                             name: range.name,
                             from: range.from,
                             to: range.to,
-                            markdown: extractResponse.response.text(),
+                            markdown: rangeValidation.cleaned_markdown,
                             chunked: false,
                         });
                     }

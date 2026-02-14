@@ -66,40 +66,127 @@ function extractLegalElements(markdown: string) {
 }
 
 /**
- * Limpia tablas mal formateadas
+ * Limpia tablas mal formateadas (procesamiento por bloques)
+ *
+ * Detecta bloques de tabla (líneas consecutivas con pipes) y valida su estructura.
+ * Solo convierte a párrafos las tablas que carecen de fila separadora válida
+ * (|---|---|) Y tienen menos de 2 filas de datos.
+ * Preserva tablas de 2+ columnas con estructura válida.
  */
 function cleanMalformedTables(markdown: string): { cleaned: string; issues: number } {
-    let cleaned = markdown;
     let issuesFound = 0;
+    const lines = markdown.split("\n");
+    const result: string[] = [];
 
-    // Buscar líneas que parecen tablas pero están rotas
-    const lines = cleaned.split("\n");
-    const cleanedLines = lines.map((line) => {
-        // Si tiene pipes pero no es una tabla válida (menos de 3 células)
-        if (line.includes("|") && !line.match(/\|\s*[-:\s|]+\s*\|/)) {
-            const cells = line.split("|").filter((c) => c.trim());
-            if (cells.length < 3) {
-                // Convertir a párrafo normal
-                issuesFound++;
-                return cells.map((c) => c.trim()).join(" - ");
+    let i = 0;
+    while (i < lines.length) {
+        const line = lines[i];
+        // Detectar inicio de bloque de tabla (línea con al menos un pipe)
+        if (line.includes("|") && line.trim().length > 1) {
+            // Recolectar todo el bloque de líneas con pipes consecutivas
+            const blockStart = i;
+            const block: string[] = [];
+            while (i < lines.length && lines[i].includes("|") && lines[i].trim().length > 1) {
+                block.push(lines[i]);
+                i++;
             }
+
+            // Validar estructura del bloque
+            const hasSeparator = block.some((l) =>
+                /^\|?\s*[-:\s]+(\|\s*[-:\s]+)+\|?\s*$/.test(l.trim())
+            );
+            const dataRows = block.filter(
+                (l) => !(/^\|?\s*[-:\s]+(\|\s*[-:\s]+)+\|?\s*$/.test(l.trim()))
+            );
+
+            if (hasSeparator && dataRows.length >= 1) {
+                // Tabla válida con separador: preservar completa
+                result.push(...block);
+            } else if (!hasSeparator && dataRows.length >= 3) {
+                // Muchas filas sin separador: intentar reparar agregando separador
+                const firstRow = block[0];
+                const cellCount = firstRow.split("|").filter((c) => c.trim()).length;
+                if (cellCount >= 2) {
+                    // Insertar separador después de la primera fila
+                    result.push(block[0]);
+                    result.push(
+                        "|" + " --- |".repeat(cellCount)
+                    );
+                    result.push(...block.slice(1));
+                    issuesFound++;
+                } else {
+                    // Una sola columna, no es tabla real
+                    for (const row of block) {
+                        const cells = row.split("|").filter((c) => c.trim());
+                        result.push(cells.map((c) => c.trim()).join(" – "));
+                    }
+                    issuesFound++;
+                }
+            } else if (!hasSeparator && dataRows.length <= 2) {
+                // Pocas filas sin separador: verificar si parece tabla de pares clave-valor
+                const firstRow = dataRows[0];
+                const cellCount = firstRow
+                    .split("|")
+                    .filter((c) => c.trim()).length;
+                if (cellCount >= 2) {
+                    // Parece clave-valor, preservar como tabla con separador
+                    result.push(block[0]);
+                    result.push("|" + " --- |".repeat(cellCount));
+                    result.push(...block.slice(1));
+                    issuesFound++;
+                } else {
+                    // Una sola columna, convertir a texto
+                    for (const row of block) {
+                        const cells = row.split("|").filter((c) => c.trim());
+                        result.push(cells.map((c) => c.trim()).join(" – "));
+                    }
+                    issuesFound++;
+                }
+            } else {
+                // Fallback: preservar tal cual
+                result.push(...block);
+            }
+        } else {
+            result.push(line);
+            i++;
         }
-        return line;
-    });
+    }
 
-    cleaned = cleanedLines.join("\n");
-
-    return { cleaned, issues: issuesFound };
+    return { cleaned: result.join("\n"), issues: issuesFound };
 }
 
 /**
- * Elimina encabezados, números de página y líneas repetitivas (headers/footers)
+ * Transforma líderes de puntos de tabla de contenidos (PageIndex-style)
+ * "Capítulo 1.......123" → "Capítulo 1: 123"
+ */
+function transformTocDots(markdown: string): string {
+    // 5+ puntos consecutivos → ": "
+    let result = markdown.replace(/\.{5,}/g, ": ");
+    // 5+ puntos separados por espacios
+    result = result.replace(/(?:\.\s){5,}\.?/g, ": ");
+    return result;
+}
+
+/**
+ * Elimina encabezados, números de página, footers repetitivos y artefactos de PDF
+ *
+ * FASE 1: Transforma TOC dots
+ * FASE 2: Detecta patrones repetidos (frecuencia >= MIN_REPEATS)
+ * FASE 3: Filtra líneas por reglas específicas:
+ *   - Números de página (Página X, Page X, Pág X, Folio X, Foja X, X de Y, romanos)
+ *   - Separadores de página
+ *   - Headers markdown duplicados consecutivos
+ *   - Patrones repetidos (headers/footers de PDF)
+ *   - Confidencialidad / watermarks repetidos
  */
 function removePageHeaders(markdown: string): { cleaned: string; removed: number } {
     let removed = 0;
-    const lines = markdown.split("\n");
 
-    // FASE 1: Detectar líneas que se repiten frecuentemente (headers/footers de PDF)
+    // FASE 1: Transformar TOC dots
+    const withoutDots = transformTocDots(markdown);
+    const lines = withoutDots.split("\n");
+
+    // FASE 2: Detectar líneas que se repiten frecuentemente (headers/footers de PDF)
     const MIN_REPEATS = 3;
     const lineFrequency = new Map<string, number>();
 
@@ -110,10 +197,11 @@ function removePageHeaders(markdown: string): { cleaned: string; removed: number
 
         // Normalizar: quitar números variables para detectar patrones
         const normalized = trimmed
-            .replace(/\d+/g, '#')
-            .replace(/\s+/g, ' ');
+            .replace(/\d+/g, "#")
+            .replace(/\s+/g, " ");
 
-        if (normalized.length > 3 && normalized.length < 120) {
+        // Rango ampliado: capturar desde headers cortos hasta largos
+        if (normalized.length > 2 && normalized.length < 200) {
             lineFrequency.set(normalized, (lineFrequency.get(normalized) || 0) + 1);
         }
     }
@@ -125,33 +213,58 @@ function removePageHeaders(markdown: string): { cleaned: string; removed: number
         }
     }
 
-    // FASE 2: Filtrar líneas
+    // FASE 3: Filtrar líneas
     const processedLines: string[] = [];
     let lastHeader = "";
 
     lines.forEach((line) => {
         const trimmed = line.trim();
 
-        // Detectar números de página sueltos
-        if (trimmed.match(/^\s*(?:Página|Page|Pág\.?)\s+\d+\s*$/i)) {
+        // --- Números de página explícitos ---
+        // "Página 3", "Page 12", "Pág. 5"
+        if (/^\s*(?:Página|Page|Pág\.?)\s+\d+\s*$/i.test(trimmed)) {
             removed++;
             return;
         }
 
-        // Detectar separadores de página tipo "--- página X ---"
-        if (trimmed.match(/^[-—–=_\s]*(?:página|page|pág\.?)\s*\d*\s*[-—–=_\s]*$/i)) {
+        // "Folio 3", "Foja 12", "Foja(s) 5"
+        if (/^\s*(?:Folio|Foja)s?\s+\d+\s*$/i.test(trimmed)) {
             removed++;
             return;
         }
 
-        // Detectar números de página sueltos (solo un número)
-        if (trimmed.match(/^\d{1,4}$/) && !trimmed.match(/^#{1,6}/)) {
+        // "3 de 45", "Página 3 de 45"
+        if (/^\s*(?:Página|Page|Pág\.?)?\s*\d{1,4}\s+de\s+\d{1,4}\s*$/i.test(trimmed)) {
             removed++;
             return;
         }
 
-        // Detectar encabezados markdown duplicados consecutivos
-        if (trimmed.match(/^#{1,6}\s+/)) {
+        // Números romanos sueltos como páginas: "i", "iv", "xii", "XXIII"
+        if (/^[ivxlcdm]{1,8}$/i.test(trimmed) && trimmed.length <= 6) {
+            removed++;
+            return;
+        }
+
+        // --- Separadores de página ---
+        // "--- página X ---", "=== 3 ===", "____"
+        if (/^[-—–=_\s]*(?:página|page|pág\.?)?\s*\d*\s*[-—–=_\s]*$/i.test(trimmed) &&
+            trimmed.length >= 3 && /[-—–=_]/.test(trimmed)) {
+            removed++;
+            return;
+        }
+
+        // --- Números sueltos (páginas) ---
+        // Solo 1-4 dígitos, pero NO años (1900-2099)
+        if (/^\d{1,4}$/.test(trimmed)) {
+            const num = parseInt(trimmed, 10);
+            if (num < 1900 || num > 2099) {
+                removed++;
+                return;
+            }
+        }
+
+        // --- Encabezados markdown duplicados consecutivos ---
+        if (/^#{1,6}\s+/.test(trimmed)) {
             if (line === lastHeader) {
                 removed++;
                 return;
@@ -159,11 +272,21 @@ function removePageHeaders(markdown: string): { cleaned: string; removed: number
             lastHeader = line;
         }
 
-        // Detectar líneas repetidas frecuentemente (headers/footers de PDF)
-        if (trimmed && !trimmed.match(/^#{1,6}\s+/)) {
+        // --- Patrones de confidencialidad/watermarks repetidos ---
+        if (/^\s*(?:CONFIDENCIAL|BORRADOR|DRAFT|COPIA|COPIA\s+SIMPLE)\s*$/i.test(trimmed)) {
+            // Solo eliminar si se repite (está en patrones)
+            const normalized = trimmed.replace(/\d+/g, "#").replace(/\s+/g, " ");
+            if (repeatedPatterns.has(normalized)) {
+                removed++;
+                return;
+            }
+        }
+
+        // --- Líneas repetidas frecuentemente (headers/footers de PDF) ---
+        if (trimmed && !/^#{1,6}\s+/.test(trimmed)) {
             const normalized = trimmed
-                .replace(/\d+/g, '#')
-                .replace(/\s+/g, ' ');
+                .replace(/\d+/g, "#")
+                .replace(/\s+/g, " ");
             if (repeatedPatterns.has(normalized)) {
                 removed++;
                 return;
