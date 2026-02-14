@@ -1,7 +1,6 @@
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { getDocument, GlobalWorkerOptions, version } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
-// Disable worker for Node.js server-side usage
-GlobalWorkerOptions.workerSrc = '';
+GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.js`;
 
 export async function getActualPageCount(arrayBuffer: ArrayBuffer): Promise<number> {
     try {
