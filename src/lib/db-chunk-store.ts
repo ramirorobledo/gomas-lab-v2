@@ -41,18 +41,38 @@ export async function saveChunk(uploadId: string, index: number, buffer: Buffer)
 export async function assembleFile(uploadId: string): Promise<Buffer> {
     const client = await getDb().connect();
     try {
-        const res = await client.query(
-            'SELECT data FROM file_chunks WHERE upload_id = $1 ORDER BY chunk_index ASC',
+        // First get total size to pre-allocate
+        const countRes = await client.query(
+            'SELECT COUNT(*)::int AS cnt, COALESCE(SUM(LENGTH(data)), 0)::bigint AS total_bytes FROM file_chunks WHERE upload_id = $1',
             [uploadId]
         );
 
-        if (res.rows.length === 0) {
+        const chunkCount = countRes.rows[0].cnt;
+        if (chunkCount === 0) {
             throw new Error('No chunks found for this upload ID');
         }
 
-        // Concatenar todos los buffers
-        const buffers = res.rows.map((row: { data: Buffer }) => row.data);
-        return Buffer.concat(buffers);
+        const totalBytes = Number(countRes.rows[0].total_bytes);
+        console.log(`Assembling ${chunkCount} chunks, total ~${(totalBytes / 1024 / 1024).toFixed(1)}MB`);
+
+        // Fetch chunks one at a time to limit peak memory (2x buffer avoided)
+        const result = Buffer.allocUnsafe(totalBytes);
+        let offset = 0;
+
+        for (let i = 0; i < chunkCount; i++) {
+            const chunkRes = await client.query(
+                'SELECT data FROM file_chunks WHERE upload_id = $1 AND chunk_index = $2',
+                [uploadId, i]
+            );
+            if (chunkRes.rows.length === 0) {
+                throw new Error(`Missing chunk ${i} for upload ${uploadId}`);
+            }
+            const chunkBuf: Buffer = chunkRes.rows[0].data;
+            chunkBuf.copy(result, offset);
+            offset += chunkBuf.length;
+        }
+
+        return result.subarray(0, offset);
     } finally {
         client.release();
     }

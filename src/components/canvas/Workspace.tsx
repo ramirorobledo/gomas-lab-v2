@@ -1,51 +1,122 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "../hud/Sidebar";
 import SystemHeader from "../hud/SystemHeader";
 import Dropzone from "./Dropzone";
 import { VisualFeed } from "../panels/VisualFeed";
 import ExtractionList from "../panels/ExtractionList";
 import type { ProcessedDocument, ExtractionRange, CertificateData } from "@/lib/types";
-import { processDocumentAction, uploadChunkAction } from "@/app/actions";
+import { startProcessingAction, uploadChunkAction, checkJobStatusAction } from "@/app/actions";
+import { motion, AnimatePresence } from "framer-motion";
+import { Loader2, Terminal, CheckCircle2, AlertTriangle, FileText, Cpu, Activity } from "lucide-react";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
 
-const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB chunks to stay safely under 4.5MB Vercel limit
+// Utility for safe tailwind merge
+function cn(...inputs: ClassValue[]) {
+    return twMerge(clsx(inputs));
+}
+
+const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB chunks
 
 export function Workspace() {
     const [file, setFile] = useState<File | null>(null);
     const [processing, setProcessing] = useState(false);
+    const [jobId, setJobId] = useState<string | null>(null);
     const [processed, setProcessed] = useState<ProcessedDocument | null>(null);
     const [activeTab, setActiveTab] = useState("certificate");
     const [extractionRanges, setExtractionRanges] = useState<ExtractionRange[]>([]);
     const [numPages, setNumPages] = useState(0);
     const [uploadProgress, setUploadProgress] = useState(0);
-    const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'processing'>('idle');
+    const [systemLogs, setSystemLogs] = useState<string[]>([]);
+
+    // Status polling state
+    const [jobStatus, setJobStatus] = useState<string>("idle");
+    const [currentStep, setCurrentStep] = useState<string>("");
+
+    const addLog = (msg: string) => {
+        setSystemLogs(prev => [...prev.slice(-49), `> [${new Date().toLocaleTimeString()}] ${msg}`]);
+    };
 
     const handleFileDrop = (droppedFile: File) => {
         setFile(droppedFile);
         setNumPages(0);
+        addLog(`File loaded: ${droppedFile.name} (${(droppedFile.size / 1024 / 1024).toFixed(2)}MB)`);
     };
 
     const handleAddRange = (from: number, to: number, name: string) => {
         setExtractionRanges([...extractionRanges, { from, to, name }]);
+        addLog(`Range added: ${name} (p${from}-p${to})`);
     };
 
     const handleRemoveRange = (idx: number) => {
         setExtractionRanges(extractionRanges.filter((_, i) => i !== idx));
     };
 
+    // Polling Effect
+    useEffect(() => {
+        if (!processing || !jobId) return;
+
+        const interval = setInterval(async () => {
+            const statusRes = await checkJobStatusAction(jobId);
+
+            if (!statusRes.success || !statusRes.status) {
+                addLog(`Error checking status: ${statusRes.error}`);
+                return;
+            }
+
+            setJobStatus(statusRes.status);
+            if (statusRes.step) setCurrentStep(statusRes.step);
+
+            if (statusRes.status === 'completed' && statusRes.result) {
+                clearInterval(interval);
+                setProcessing(false);
+                addLog("Processing complete.");
+
+                const data = statusRes.result;
+                setNumPages(data.pageCount || 0);
+                setProcessed({
+                    markdown: data.markdown || "",
+                    certificateData: data.certificate,
+                    anomalies: data.anomalies || [],
+                    extractions: data.extractions || [],
+                    pageCount: data.pageCount || 0,
+                });
+            } else if (statusRes.status === 'failed') {
+                clearInterval(interval);
+                setProcessing(false);
+                alert(`Error: ${statusRes.error}`);
+                addLog(`CRITICAL ERROR: ${statusRes.error}`);
+            } else {
+                // Still processing
+                if (statusRes.progress && statusRes.progress.total > 0) {
+                    addLog(`Progress: ${statusRes.step} (${statusRes.progress.current}/${statusRes.progress.total})`);
+                } else {
+                    addLog(`Status: ${statusRes.step}`);
+                }
+            }
+
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [processing, jobId]);
+
+
     const handleProcess = async () => {
         if (!file) return;
 
         setProcessing(true);
         setUploadProgress(0);
+        setSystemLogs([]);
+        addLog("Initiating upload sequence...");
 
         try {
             let uploadId: string | null = null;
 
-            // Force chunking for files > 4MB to bypass Vercel proxy limits
+            // Chunk Upload Strategy
             if (file.size > 4 * 1024 * 1024) {
-                setUploadPhase('uploading');
+                addLog("Large file detected. Engaging chunk interface...");
                 uploadId = crypto.randomUUID();
                 const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
@@ -60,16 +131,16 @@ export function Workspace() {
                     formData.append('chunk', chunk);
 
                     const res = await uploadChunkAction(formData);
-                    if (!res.success) {
-                        throw new Error(res.error || `Failed to upload chunk ${i}`);
-                    }
+                    if (!res.success) throw new Error(res.error || `Failed to upload chunk ${i}`);
 
-                    setUploadProgress((i + 1) / totalChunks);
+                    const progress = (i + 1) / totalChunks;
+                    setUploadProgress(progress);
+                    addLog(`Uploaded chunk ${i + 1}/${totalChunks}`);
                 }
             }
 
-            // Processing phase
-            setUploadPhase('processing');
+            addLog("Upload complete. Requesting processing job...");
+
             const formData = new FormData();
             if (uploadId) {
                 formData.append('uploadId', uploadId);
@@ -79,43 +150,27 @@ export function Workspace() {
             }
             formData.append('ranges', JSON.stringify(extractionRanges));
 
-            const data = await processDocumentAction(formData);
+            const startRes = await startProcessingAction(formData);
 
-            if (!data.success) {
-                throw new Error(data.error || "Processing failed");
+            if (!startRes.success || !startRes.jobId) {
+                throw new Error(startRes.error || "Failed to start job");
             }
 
-            setNumPages(data.pageCount || 0);
-            setProcessed({
-                markdown: data.markdown || "",
-                certificateData: data.certificate ? {
-                    hash_original: data.certificate.hash_original || "",
-                    hash_markdown: data.certificate.hash_markdown || "",
-                    timestamp: data.certificate.timestamp || "",
-                    validation_status: data.certificate.status || "ERROR",
-                    vlm_used: 'gemini-2.0-flash',
-                    processing_time_ms: data.processingTime || 0,
-                    anomalies_count: data.anomalies?.length || 0,
-                    integrity_hash: data.certificate.integrity_hash || "",
-                } as CertificateData : null,
-                anomalies: data.anomalies || [],
-                extractions: data.extractions || [],
-                pageCount: data.pageCount || 0,
-            });
+            setJobId(startRes.jobId);
+            addLog(`Job started: ${startRes.jobId}`);
+            // Polling effect will take over from here
+
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Unknown error';
             console.error("Error processing file:", error);
-            alert(`Error procesando documento: ${message}`);
-        } finally {
+            alert(`Error initializing: ${message}`);
             setProcessing(false);
-            setUploadPhase('idle');
-            setUploadProgress(0);
         }
     };
 
     return (
-        <div className="workspace h-screen w-screen bg-base flex overflow-hidden">
-            {/* SIDEBAR LEFT */}
+        <div className="workspace h-screen w-screen bg-base flex overflow-hidden font-sans text-white/90">
+            {/* SIDEBAR */}
             <Sidebar
                 activeTab={activeTab}
                 onSwitchTab={setActiveTab}
@@ -123,142 +178,167 @@ export function Workspace() {
             />
 
             {/* MAIN CONTENT */}
-            <div className="flex-1 flex flex-col overflow-hidden">
-                {/* HEADER */}
+            <div className="flex-1 flex flex-col overflow-hidden relative">
+                {/* Background Grid */}
+                <div className="absolute inset-0 pointer-events-none opacity-5"
+                    style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }}
+                />
+
                 <SystemHeader />
 
-                {/* MAIN WORKSPACE */}
-                <div className="workspace-content flex-1 flex gap-6 p-6 overflow-hidden">
-                    {/* CENTER: Upload & Extractions */}
-                    <div className="workspace-center w-2/5 flex flex-col gap-4 overflow-hidden">
-                        {/* Dropzone */}
-                        <div className="flex-1">
+                <div className="workspace-content flex-1 flex gap-6 p-6 overflow-hidden z-10">
+
+                    {/* LEFT PANEL: Controls */}
+                    <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="w-2/5 flex flex-col gap-4 overflow-hidden"
+                    >
+                        {/* Dropzone with Status */}
+                        <div className="flex-1 relative group">
+                            <div className={cn(
+                                "absolute inset-0 bg-primary/5 rounded-lg border border-primary/20 transition-all duration-500",
+                                processing && "animate-pulse border-primary/50"
+                            )} />
+
                             <Dropzone
                                 onFileDrop={handleFileDrop}
                                 file={file}
                                 loading={processing}
                                 uploadProgress={uploadProgress}
-                                uploadPhase={uploadPhase}
+                                uploadPhase={jobId ? 'processing' : (uploadProgress > 0 ? 'uploading' : 'idle')}
                             />
                         </div>
 
-                        {/* Extractions Manager - Show when file uploaded */}
+                        {/* Extractions or Actions */}
                         {file && !processed && (
-                            <ExtractionList
-                                ranges={extractionRanges}
-                                onAdd={handleAddRange}
-                                onRemove={handleRemoveRange}
-                                onProcess={handleProcess}
-                                isProcessing={processing}
-                                maxPages={numPages > 0 ? numPages : 100}
-                            />
-                        )}
-
-                        {/* Process All Button - Only if no extractions selected */}
-                        {file && !processed && extractionRanges.length === 0 && (
-                            <button
-                                onClick={handleProcess}
-                                disabled={processing}
-                                className="w-full px-4 py-3 bg-primary/20 hover:bg-primary/40 disabled:bg-gray-700 text-white font-tech rounded-sm transition-all border border-primary/50 uppercase tracking-wider text-xs shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="flex flex-col gap-2"
                             >
-                                {processing
-                                    ? uploadPhase === 'uploading'
-                                        ? `SUBIENDO ${Math.round(uploadProgress * 100)}%`
-                                        : "PROCESANDO..."
-                                    : "Procesar Documento Completo"}
-                            </button>
+                                <ExtractionList
+                                    ranges={extractionRanges}
+                                    onAdd={handleAddRange}
+                                    onRemove={handleRemoveRange}
+                                    onProcess={handleProcess}
+                                    isProcessing={processing}
+                                    maxPages={numPages > 0 ? numPages : 100}
+                                />
+
+                                {extractionRanges.length === 0 && (
+                                    <button
+                                        onClick={handleProcess}
+                                        disabled={processing}
+                                        className="w-full px-6 py-4 bg-primary/20 hover:bg-primary/30 disabled:opacity-50 disabled:cursor-not-allowed
+                                              border border-primary/50 text-primary font-tech uppercase tracking-widest text-sm
+                                              shadow-[0_0_20px_rgba(99,102,241,0.15)] hover:shadow-[0_0_30px_rgba(99,102,241,0.3)]
+                                              transition-all duration-300 rounded relative overflow-hidden group"
+                                    >
+                                        <span className="relative z-10 flex items-center justify-center gap-2">
+                                            {processing ? (
+                                                <>
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                    {currentStep || "INITIALIZING..."}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Cpu className="w-4 h-4" />
+                                                    PROCESS FULL DOCUMENT
+                                                </>
+                                            )}
+                                        </span>
+                                        <div className="absolute inset-0 bg-primary/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                                    </button>
+                                )}
+                            </motion.div>
                         )}
 
-                        {/* New Document Button */}
+                        {/* Reset Button */}
                         {processed && (
-                            <button
+                            <motion.button
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
                                 onClick={() => {
                                     setFile(null);
                                     setProcessed(null);
-                                    setExtractionRanges([]);
-                                    setNumPages(0);
+                                    setJobId(null);
+                                    setSystemLogs([]);
+                                    setUploadProgress(0);
                                 }}
-                                className="w-full px-4 py-3 bg-gray-800 hover:bg-gray-700 text-white font-tech rounded-sm transition-all border border-border uppercase tracking-wider text-xs"
+                                className="w-full px-4 py-3 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 font-mono text-xs border border-zinc-800 rounded transition-all"
                             >
-                                🔄 Nuevo Documento
-                            </button>
+                                [ SYSTEM RESET ]
+                            </motion.button>
                         )}
 
-                        {/* System Console */}
-                        {!processed && (
-                            <div className="glass-panel p-4 rounded-sm border border-primary/30 flex-1 flex flex-col overflow-hidden">
-                                <h3 className="font-tech text-primary uppercase text-xs tracking-widest mb-3">System Console</h3>
-                                <div className="bg-black/60 p-3 rounded flex-1 overflow-auto border border-primary/20 font-mono text-[10px] space-y-1">
-                                    <p className="text-muted">&gt; Sistema inicializado</p>
-                                    <p className="text-muted">&gt; Esperando documento...</p>
-                                    {file && (
-                                        <>
-                                            <p className="text-primary">&gt; [PDF] Archivo cargado: {file.name}</p>
-                                            {numPages > 0 && <p className="text-primary">&gt; [PAGES] Total: {numPages} páginas</p>}
-                                        </>
-                                    )}
-                                    {extractionRanges.length > 0 && (
-                                        <p className="text-primary">&gt; [EXTRACT] {extractionRanges.length} rango(s) configurado(s)</p>
-                                    )}
-                                    {processing && uploadPhase === 'uploading' && (
-                                        <>
-                                            <p className="text-primary">&gt; [UPLOAD] Subiendo archivo a base de datos...</p>
-                                            <p className="text-primary">&gt; [UPLOAD] Progreso: {Math.round(uploadProgress * 100)}%</p>
-                                            <div className="mt-1 h-1.5 bg-base border border-primary/30 rounded-sm overflow-hidden">
-                                                <div
-                                                    className="h-full bg-primary transition-all duration-300 ease-out"
-                                                    style={{ width: `${uploadProgress * 100}%` }}
-                                                />
-                                            </div>
-                                        </>
-                                    )}
-                                    {processing && uploadPhase === 'processing' && (
-                                        <>
-                                            <p className="text-primary">&gt; [OCR] Extrayendo texto con Gemini 1.5 Flash...</p>
-                                            <p className="text-primary">&gt; [VLM] Analizando estructura forense...</p>
-                                            <p className="text-primary">&gt; [PageIndex] Mapeando contenido...</p>
-                                        </>
-                                    )}
+                        {/* TERMINAL LOGS */}
+                        <div className="h-48 glass-panel rounded border border-primary/20 flex flex-col overflow-hidden relative">
+                            <div className="px-3 py-2 border-b border-primary/10 bg-black/40 flex items-center justify-between">
+                                <span className="font-tech text-[10px] text-primary/70 flex items-center gap-2">
+                                    <Terminal className="w-3 h-3" />
+                                    SYSTEM_LOGS
+                                </span>
+                                <div className="flex gap-1">
+                                    <div className="w-2 h-2 rounded-full bg-red-500/50" />
+                                    <div className="w-2 h-2 rounded-full bg-yellow-500/50" />
+                                    <div className="w-2 h-2 rounded-full bg-green-500/50" />
                                 </div>
                             </div>
-                        )}
-                    </div>
-
-                    {/* RIGHT: Live Preview */}
-                    <div className="workspace-right flex-1 overflow-hidden">
-                        {processed ? (
-                            <VisualFeed
-                                markdown={processed.markdown}
-                                certificateData={processed.certificateData}
-                                anomalies={processed.anomalies}
-                                extractions={processed.extractions}
-                                loading={false}
-                            />
-                        ) : (
-                            <div className="h-full flex items-center justify-center border-2 border-dashed border-primary/30 rounded-sm bg-panel/30 backdrop-blur-sm">
-                                <div className="text-center">
-                                    <p className="text-4xl mb-4">📄</p>
-                                    <p className="text-primary font-tech uppercase tracking-widest">Sube un documento</p>
-                                    <p className="text-xs text-muted mt-2 font-data">para gestionar extracciones</p>
-                                </div>
+                            <div className="flex-1 p-3 font-mono text-[10px] text-primary/80 overflow-y-auto space-y-1 scrollbar-hide">
+                                {systemLogs.length === 0 && <span className="opacity-50">... awaiting input ...</span>}
+                                {systemLogs.map((log, i) => (
+                                    <div key={i} className="border-l-2 border-primary/20 pl-2">
+                                        {log}
+                                    </div>
+                                ))}
+                                <div ref={(el) => el?.scrollIntoView({ behavior: 'smooth' })} />
                             </div>
-                        )}
-                    </div>
-                </div>
+                        </div>
 
-                {/* FOOTER Status */}
-                <div className="workspace-footer px-8 py-3 border-t border-border bg-panel/30 backdrop-blur-sm flex justify-between items-center text-[10px]">
-                    <div className="flex gap-6 text-muted font-data">
-                        <span>SYSTEM STATUS: <span className="text-success">SECURE</span></span>
-                        <span>PROCESSING: <span className={processing ? "text-primary animate-pulse" : "text-muted"}>
-                            {processing ? "ACTIVE" : "IDLE"}
-                        </span></span>
+                    </motion.div>
+
+                    {/* RIGHT PANEL: VISUAL FEED */}
+                    <div className="flex-1 relative overflow-hidden rounded-lg border border-white/5 bg-black/20 backdrop-blur-sm">
+                        <AnimatePresence mode="wait">
+                            {processed ? (
+                                <motion.div
+                                    key="feed"
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="h-full"
+                                >
+                                    <VisualFeed
+                                        markdown={processed.markdown}
+                                        certificateData={processed.certificateData}
+                                        anomalies={processed.anomalies}
+                                        extractions={processed.extractions}
+                                        loading={false}
+                                    />
+                                </motion.div>
+                            ) : (
+                                <motion.div
+                                    key="placeholder"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="h-full flex items-center justify-center flex-col gap-4"
+                                >
+                                    <div className="w-24 h-24 rounded-full border border-dashed border-primary/20 flex items-center justify-center animate-spin-slow">
+                                        <div className="w-16 h-16 rounded-full bg-primary/5 flex items-center justify-center animate-reverse-spin">
+                                            <FileText className="w-8 h-8 text-primary/50" />
+                                        </div>
+                                    </div>
+                                    <div className="text-center space-y-2">
+                                        <h3 className="text-lg font-tech text-primary/80 tracking-widest">AWAITING_DATA_STREAM</h3>
+                                        <p className="text-xs text-muted font-mono">Secure Connection Established</p>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
-                    <div className="text-muted">
-                        {numPages > 0 && <span>PAGES: <span className="text-primary">{numPages}</span> | </span>}
-                        {extractionRanges.length > 0 && <span>RANGES: <span className="text-primary">{extractionRanges.length}</span></span>}
-                        {processed && <span>COMPLETE: <span className="text-success">✓</span></span>}
-                    </div>
+
                 </div>
             </div>
         </div>

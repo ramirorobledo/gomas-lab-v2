@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { processDocumentAction } from '@/app/actions';
+import { startProcessingAction } from '@/app/actions';
 
-export const maxDuration = 300;
+export const maxDuration = 600;
 
 export async function POST(request: NextRequest) {
     try {
         const formData = await request.formData();
-        const result = await processDocumentAction(formData);
+        const result = await startProcessingAction(formData);
 
         if (!result.success) {
             return NextResponse.json(

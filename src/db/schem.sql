@@ -18,3 +18,29 @@
 --
 -- Este archivo se mantiene como referencia de arquitectura.
 -- =============================================================
+-- =============================================================
+-- TABLAS DE SOPORTE (Lazy Initialized en runtime)
+-- =============================================================
+
+-- 1. FILE CHUNKS (Temporal storage for large uploads)
+-- CREATE TABLE IF NOT EXISTS file_chunks (
+--   upload_id TEXT NOT NULL,
+--   chunk_index INTEGER NOT NULL,
+--   data BYTEA NOT NULL,
+--   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+--   PRIMARY KEY (upload_id, chunk_index)
+-- );
+
+-- 2. PROCESSING JOBS (Async state tracking)
+-- CREATE TABLE IF NOT EXISTS processing_jobs (
+--     id UUID PRIMARY KEY,
+--     status TEXT NOT NULL, -- pending, processing, completed, failed
+--     filename TEXT NOT NULL,
+--     total_pages INTEGER DEFAULT 0,
+--     processed_pages INTEGER DEFAULT 0,
+--     current_step TEXT,
+--     result_data JSONB,
+--     error_message TEXT,
+--     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+--     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+-- );
