@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { validateAndCleanMarkdown, generateForensicCertificate } from '@/lib/validation';
 import { buildPageIndexTree } from '@/lib/pageindex';
 import { getUpload, deleteUpload } from '@/lib/chunk-store';
+import { getActualPageCount } from '@/lib/pdf-utils';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
@@ -119,28 +120,9 @@ export async function POST(request: NextRequest) {
 
         const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-        // Primero: Obtener número total de páginas
-        const countResponse = await model.generateContent([
-            {
-                inlineData: {
-                    mimeType: 'application/pdf',
-                    data: base64,
-                },
-            },
-            {
-                text: `¿Cuántas páginas tiene exactamente este PDF? Responde SOLO con un número entero, sin texto adicional.
-Ejemplo: 38
-No responder con "38 páginas" o "approximately 38", SOLO el número.`,
-            },
-        ]);
-
-        const pageCountStr = countResponse.response.text().trim();
-        // Extraer solo dígitos de la respuesta
-        const match = pageCountStr.match(/\d+/);
-        const totalPages = match ? parseInt(match[0]) : 1;
-        console.log(`[DEBUG] Raw page count response: "${pageCountStr}" → Parsed: ${totalPages}`);
-
-        console.log(`Total pages detected: ${totalPages}`);
+        // Obtener número real de páginas via pdfjs-dist
+        const totalPages = await getActualPageCount(arrayBuffer);
+        console.log(`Total pages detected (PDF library): ${totalPages}`);
 
         // Segundo: Extraer documento completo
         const response = await model.generateContent([
